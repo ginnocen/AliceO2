@@ -597,6 +597,11 @@ struct RowViewBase : public IP, C... {
     return IP::operator==(static_cast<IP>(other));
   }
 
+  template <typename CL, typename TA>
+  void setCurrentIndex(framework::pack<CL> p, TA*current) {
+    CL::setCurrent(current);
+  }
+
  private:
   /// Helper to move to the correct chunk, if needed.
   /// FIXME: not needed?
@@ -863,12 +868,18 @@ class TableMetadata
                                                                                          \
     binding_t::iterator _Getter_() const                                                 \
     {                                                                                    \
-      constexpr auto getBegin = [](auto* p) { return p->begin(); };                      \
+      std::cout << "foo" << this << std::endl;\
+      assert(mBinding != 0);                                                             \
       return mBinding->begin() + *mColumnIterator;                                       \
     }                                                                                    \
-    void setCurrent(binding_t* current) { mBinding = current; }                          \
+    void setCurrent(binding_t* current) {                                                \
+      std::cout << "foo" << this << std::endl;\
+      assert(current != 0);                                                              \
+      assert(mBinding == 0); this->mBinding = current;                                     \
+      assert(mBinding != 0);                                                             \
+     }                                                                                   \
     binding_t* getCurrent() { return mBinding; }                                         \
-    binding_t* mBinding;                                                                 \
+    binding_t* mBinding = nullptr;                                                       \
   };                                                                                     \
   static const o2::framework::expressions::BindingNode _Getter_##Id { "f" #_Name_ "sID", \
                                                                       o2::framework::expressions::selectArrowType<_Type_>() }
