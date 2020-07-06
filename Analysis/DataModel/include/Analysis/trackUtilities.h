@@ -16,10 +16,8 @@
 #define O2_ANALYSIS_TRACKUTILITIES_H_
 
 template <typename T>
-o2::track::TrackParCov getTrackParCov(T track)
+auto getTrackParCov(T track)
 {
-  float x__ = track.x();
-  float alpha = track.alpha();
   std::array<float, 5> arraypar = {track.y(), track.z(), track.snp(),
                                    track.tgl(), track.signed1Pt()};
   std::array<float, 15> covpar = {track.cYY(), track.cZY(), track.cZZ(),
@@ -28,7 +26,7 @@ o2::track::TrackParCov getTrackParCov(T track)
                                   track.cTglSnp(), track.cTglTgl(),
                                   track.c1PtY(), track.c1PtZ(), track.c1PtSnp(),
                                   track.c1PtTgl(), track.c1Pt21Pt2()};
-  return o2::track::TrackParCov(x__, alpha, arraypar, covpar);
+  return o2::track::TrackParCov(track.x(), track.alpha(), std::move(arraypar), std::move(covpar));
 }
 
 #endif // O2_ANALYSIS_TRACKUTILITIES_H_

@@ -68,7 +68,7 @@ struct SelectTracks {
       if (!isselected_0)
         status = 0;
       array<float, 2> dca;
-      o2::track::TrackParCov trackparvar0 = getTrackParCov(track_0);
+      auto trackparvar0 = getTrackParCov(track_0);
       trackparvar0.propagateParamToDCA(vtxXYZ, d_bz, &dca);
       if (abs(dca[0]) < dcatoprimxymin)
         status = 0;
@@ -141,12 +141,12 @@ struct HFTrackIndexSkimsCreator {
       auto& track_p1 = *i_p1;
       if (track_p1.signed1Pt() < 0)
         continue;
-      o2::track::TrackParCov trackparvar_p1 = getTrackParCov(track_p1);
+      auto trackparvar_p1 = getTrackParCov(track_p1);
       for (auto i_n1 = tracks.begin(); i_n1 != tracks.end(); ++i_n1) {
         auto& track_n1 = *i_n1;
         if (track_n1.signed1Pt() > 0)
           continue;
-        o2::track::TrackParCov trackparvar_n1 = getTrackParCov(track_n1);
+        auto trackparvar_n1 = getTrackParCov(track_n1);
         df.setUseAbsDCA(true);
         int nCand = df.process(trackparvar_p1, trackparvar_n1);
         if (nCand == 0)
@@ -184,7 +184,7 @@ struct HFTrackIndexSkimsCreator {
               continue;
             if (b_dovalplots == true)
               hmass3->Fill(sqrt(mass3prong2));
-            o2::track::TrackParCov trackparvar_p2 = getTrackParCov(track_p2);
+            auto trackparvar_p2 = getTrackParCov(track_p2);
             df3.setUseAbsDCA(true);
             int nCand3 = df3.process(trackparvar_p1, trackparvar_n1, trackparvar_p2);
             if (nCand3 == 0)
@@ -221,7 +221,7 @@ struct HFTrackIndexSkimsCreator {
             if (mass3prong2 < d_minmassDp * d_minmassDp || mass3prong2 > d_maxmassDp * d_maxmassDp)
               continue;
             hmass3->Fill(sqrt(mass3prong2));
-            o2::track::TrackParCov trackparvar_n2 = getTrackParCov(track_n2);
+            auto trackparvar_n2 = getTrackParCov(track_n2);
             df3.setUseAbsDCA(true);
             int nCand3 = df3.process(trackparvar_n1, trackparvar_p1, trackparvar_n2);
             if (nCand3 == 0)
