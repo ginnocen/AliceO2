@@ -1,10 +1,9 @@
-/// \file CheckTopologies.C
-/// Macros to test the generation of a dictionary of topologies. Three dictionaries are generated: one with signal-cluster only, one with noise-clusters only and one with all the clusters.
+/// \file run_buildTopoDict_its
+/// Macros to generate dictionary of topologies.
 
 #if !defined(__CLING__) || defined(__ROOTCLING__)
 #include <TAxis.h>
 #include <TCanvas.h>
-#include <TSystem.h>
 #include <TFile.h>
 #include <TH1F.h>
 #include <TH2F.h>
@@ -13,6 +12,7 @@
 #include <TStyle.h>
 #include <TTree.h>
 #include <TStopwatch.h>
+#include <TSystem.h>
 #include <fstream>
 #include <string>
 
@@ -26,14 +26,17 @@
 #include "MathUtils/Cartesian3D.h"
 #include "SimulationDataFormat/MCCompLabel.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
-#include "DetectorsCommonDataFormats/NameConf.h"
-#include "Framework/Logger.h"
 #include <unordered_map>
+#include "DetectorsCommonDataFormats/NameConf.h"
 #endif
 
-void CheckTopologies(std::string clusfile = "o2clus_its.root",
-                     std::string hitfile = "o2sim_HitsITS.root",
-                     std::string inputGeom = "")
+/// Build dictionary of topologies from the root file with compact clusters
+/// If the hitfile is non-empty, the mean bias between the cluster COG
+/// and mean MC hit position is calculated
+
+void run_buildTopoDict_its(std::string clusfile = "o2clus_its.root",
+                           std::string hitfile = "o2sim_HitsITS.root",
+                           std::string inputGeom = "")
 {
   const int QEDSourceID = 99; // Clusters from this MC source correspond to QED electrons
 
@@ -43,7 +46,6 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
   using o2::itsmft::BuildTopologyDictionary;
   using o2::itsmft::ClusterTopology;
   using o2::itsmft::CompClusterExt;
-  using o2::itsmft::CompCluster;
   using o2::itsmft::Hit;
   using ROFRec = o2::itsmft::ROFRecord;
   using MC2ROF = o2::itsmft::MC2ROFRecord;
@@ -62,7 +64,7 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
   gman->fillMatrixCache(o2::utils::bit2Mask(o2::TransformType::T2L, o2::TransformType::T2GRot,
                                             o2::TransformType::L2G)); // request cached transforms
 
-  // Hits
+  // Hits if requested
   TFile* fileH = nullptr;
   TTree* hitTree = nullptr;
 
@@ -97,10 +99,7 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
   }
   clusTree->GetEntry(0);
 
-  // Topologies dictionaries: 1) all clusters 2) signal clusters only 3) noise clusters only
-  BuildTopologyDictionary completeDictionary;
-  BuildTopologyDictionary signalDictionary;
-  BuildTopologyDictionary noiseDictionary;
+  BuildTopologyDictionary dict;
 
   int nROFRec = (int)rofRecVec.size();
   std::vector<int> mcEvMin(nROFRec, hitTree->GetEntries()), mcEvMax(nROFRec, -1);
@@ -151,24 +150,20 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
 
       const auto& cluster = (*clusArr)[clEntry];
 
-      if (cluster.getPatternID() != CompCluster::InvalidPatternID) {
-        LOG(WARNING) << "Clusters have already been generated with a dictionary! Quitting";
-        return;
-      }
-
       ClusterTopology topology;
       o2::itsmft::ClusterPattern pattern(pattIdx);
       topology.setPattern(pattern);
-
+      //
+      // do we need to account for the bias of cluster COG wrt MC hit center?
       float dX = BuildTopologyDictionary::IgnoreVal, dZ = BuildTopologyDictionary::IgnoreVal;
       if (clusLabArr) {
-        const auto& lab = (clusLabArr->getLabels(clEntry))[0];
+        const auto& lab = (clusLabArr->getLabels(clEntry))[0]; // we neglect effect of cluster contributed by multiple hits
         auto srcID = lab.getSourceID();
-        if (lab.isValid() && srcID != QEDSourceID) { // use MC truth info only for non-QED and non-noise clusters
+        if (!lab.isNoise() && srcID != QEDSourceID) { // use MC truth info only for non-QED and non-noise clusters
           auto trID = lab.getTrackID();
           const auto& mc2hit = mc2hitVec[lab.getEventID()];
           const auto* hitArray = hitVecPool[lab.getEventID()];
-          Int_t chipID = cluster.getSensorID();
+          int chipID = cluster.getSensorID();
           uint64_t key = (uint64_t(trID) << 32) + chipID;
           auto hitEntry = mc2hit.find(key);
           if (hitEntry != mc2hit.end()) {
@@ -182,12 +177,9 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
           } else {
             printf("Failed to find MC hit entry for Tr:%d chipID:%d\n", trID, chipID);
           }
-          signalDictionary.accountTopology(topology, dX, dZ);
-        } else {
-          noiseDictionary.accountTopology(topology, dX, dZ);
         }
       }
-      completeDictionary.accountTopology(topology, dX, dZ);
+      dict.accountTopology(topology, dX, dZ);
     }
     // clean MC cache for events which are not needed anymore
     int irfNext = irof;
@@ -201,60 +193,24 @@ void CheckTopologies(std::string clusfile = "o2clus_its.root",
     }
   }
 
+  dict.setThreshold(0.0001);
+  dict.groupRareTopologies();
+
   auto dID = o2::detectors::DetID::ITS;
+  dict.printDictionaryBinary(o2::base::NameConf::getDictionaryFileName(dID, "", ".bin"));
+  dict.printDictionary(o2::base::NameConf::getDictionaryFileName(dID, "", ".txt"));
+  dict.saveDictionaryRoot(o2::base::NameConf::getDictionaryFileName(dID, "", ".root"));
 
-  completeDictionary.setThreshold(0.0001);
-  completeDictionary.groupRareTopologies();
-  completeDictionary.printDictionaryBinary(o2::base::NameConf::getDictionaryFileName(dID, "", ".bin"));
-  completeDictionary.printDictionary(o2::base::NameConf::getDictionaryFileName(dID, "", ".txt"));
-  completeDictionary.saveDictionaryRoot(o2::base::NameConf::getDictionaryFileName(dID, "", ".root"));
-
-  TFile histogramOutput("histograms.root", "recreate");
+  TFile histogramOutput("dict_histograms.root", "recreate");
   TCanvas* cComplete = new TCanvas("cComplete", "Distribution of all the topologies");
   cComplete->cd();
   cComplete->SetLogy();
   TH1F* hComplete = nullptr;
-  o2::itsmft::TopologyDictionary::getTopologyDistribution(completeDictionary.getDictionary(), hComplete, "hComplete");
+  o2::itsmft::TopologyDictionary::getTopologyDistribution(dict.getDictionary(), hComplete, "hComplete");
   hComplete->SetDirectory(0);
   hComplete->Draw("hist");
-  hComplete->Write();
+  cComplete->Print("dictHisto.pdf");
   cComplete->Write();
-
-  TCanvas* cNoise = nullptr;
-  TCanvas* cSignal = nullptr;
-  TH1F* hNoise = nullptr;
-  TH1F* hSignal = nullptr;
-
-  if (clusLabArr) {
-    noiseDictionary.setThreshold(0.0001);
-    noiseDictionary.groupRareTopologies();
-    noiseDictionary.printDictionaryBinary(o2::base::NameConf::getDictionaryFileName(dID, "noise", ".bin"));
-    noiseDictionary.printDictionary(o2::base::NameConf::getDictionaryFileName(dID, "noise", ".txt"));
-    noiseDictionary.saveDictionaryRoot(o2::base::NameConf::getDictionaryFileName(dID, "noise", ".root"));
-    signalDictionary.setThreshold(0.0001);
-    signalDictionary.groupRareTopologies();
-    signalDictionary.printDictionaryBinary(o2::base::NameConf::getDictionaryFileName(dID, "signal", ".bin"));
-    signalDictionary.printDictionary(o2::base::NameConf::getDictionaryFileName(dID, "signal", ".txt"));
-    signalDictionary.saveDictionaryRoot(o2::base::NameConf::getDictionaryFileName(dID, "signal", ".root"));
-    cNoise = new TCanvas("cNoise", "Distribution of noise topologies");
-    cNoise->cd();
-    cNoise->SetLogy();
-    o2::itsmft::TopologyDictionary::getTopologyDistribution(noiseDictionary.getDictionary(), hNoise, "hNoise");
-    hNoise->SetDirectory(0);
-    hNoise->Draw("hist");
-    histogramOutput.cd();
-    hNoise->Write();
-    cNoise->Write();
-    cSignal = new TCanvas("cSignal", "cSignal");
-    cSignal->cd();
-    cSignal->SetLogy();
-    o2::itsmft::TopologyDictionary::getTopologyDistribution(signalDictionary.getDictionary(), hSignal, "hSignal");
-    hSignal->SetDirectory(0);
-    hSignal->Draw("hist");
-    histogramOutput.cd();
-    hSignal->Write();
-    cSignal->Write();
-    sw.Stop();
-    sw.Print();
-  }
+  sw.Stop();
+  sw.Print();
 }

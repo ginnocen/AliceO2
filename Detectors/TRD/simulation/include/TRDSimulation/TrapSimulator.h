@@ -21,19 +21,15 @@
 #include <iostream>
 #include <ostream>
 #include <fstream>
-#include <gsl/span>
 
 #include "TRDBase/Tracklet.h"
 #include "TRDBase/FeeParam.h"
 #include "TRDBase/Digit.h"
-#include "TRDBase/Tracklet.h"
 #include "TRDSimulation/Digitizer.h"
 #include "TRDSimulation/TrapConfigHandler.h" //TODO I think i can dump this.
 #include "TRDSimulation/TrapConfig.h"
 #include "TRDBase/MCLabel.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
-//#include "DataFormatsTRD/RawData.h"
-#include "DataFormatsTRD/Tracklet64.h"
 
 class TH2F;
 
@@ -86,8 +82,6 @@ class TrapSimulator
     for (auto& tmplabel : mADCLabels)
       tmplabel.clear();      // clear MC Labels sent in from the digits coming in.
     mTrackletLabels.clear(); // clear the stored labels.
-    mTrackletArray.clear();
-    mTrackletArray64.clear();
   };
   //  void setData(int iadc, const std::vector<int>& adc);                                                                              // set ADC data with array
   void setData(int iadc, const ArrayADC& adc, std::vector<o2::MCCompLabel>& labels); // set ADC data with array
@@ -123,9 +117,9 @@ class TrapSimulator
   std::string getTrklBranchName() const { return mTrklBranchName; }
   void setTrklBranchName(std::string name) { mTrklBranchName = name; }
 
-  int packData(std::vector<uint32_t>& rawdata, uint32_t offset);
-  int getRawStream(std::vector<uint32_t>& buf, uint32_t offset, unsigned int iEv = 0) const; // Produce raw data stream - Real data format
-  int getTrackletStream(std::vector<uint32_t>& buf, uint32_t offset);                        // produce the tracklet stream for this MCM
+  int packData(std::vector<uint32_t>& buf);
+  int produceRawStream(std::vector<uint32_t>& buf, unsigned int iEv = 0) const; // Produce raw data stream - Real data format
+  int produceTrackletStream(std::vector<uint32_t>& buf);                        // produce the tracklet stream for this MCM
 
   // different stages of processing in the TRAP
   void filter();                // Apply digital filters for existing data (according to configuration)
@@ -201,9 +195,9 @@ class TrapSimulator
   static const int mgkDmemAddrTimeOffset = 0xc3fe;   // DMEM address of time offset t0
   static const int mgkDmemAddrYcorr = 0xc3ff;        // DMEM address of y correction (mis-alignment)
   static const int mgkMaxTracklets = 4;              // maximum number of tracklet-words submitted per MCM (one per CPU)
+  //std::array<TrackletMCM> getTrackletArray() const { return mTrackletArray; }
   std::vector<Tracklet>& getTrackletArray() { return mTrackletArray; }
-  std::vector<Tracklet64>& getTrackletArray64() { return mTrackletArray64; }
-  void getTracklet64s(std::vector<Tracklet64>& TrackletStore); // place the trapsim 64 bit tracklets nto the incoming vector
+  void getTracklets(std::vector<Tracklet>& TrackletStore); // place the trapsim tracklets nto the incoming vector
   o2::dataformats::MCTruthContainer<o2::MCCompLabel>& getTrackletLabels() { return mTrackletLabels; }
 
   bool checkInitialized() const;     // Check whether the class is initialized
@@ -265,7 +259,6 @@ class TrapSimulator
     int mNhits;          // number of hits
     unsigned int mQ0;    // charge accumulated in first window
     unsigned int mQ1;    // charge accumulated in second window
-    unsigned int mQ2;    // charge accumulated in some other windows TODO find or write the documentation for window3
     unsigned int mSumX;  // sum x
     int mSumY;           // sum y
     unsigned int mSumX2; // sum x**2
@@ -276,7 +269,6 @@ class TrapSimulator
       mNhits = 0;
       mQ0 = 0;
       mQ1 = 0;
-      mQ2 = 0; //TODO should this go here as its calculated differeintly in softwaren not hardware like the other 2?
       mSumX = 0;
       mSumY = 0;
       mSumX2 = 0;
@@ -302,7 +294,6 @@ class TrapSimulator
   std::array<std::vector<o2::MCCompLabel>, FeeParam::mgkNadcMcm> mADCLabels{}; // MC Labels sent in from the digits coming in.
   std::vector<unsigned int> mMCMT;      // tracklet word for one mcm/trap-chip
   std::vector<Tracklet> mTrackletArray; // Array of TRDtrackletMCM which contains MC information in addition to the tracklet word
-  std::vector<Tracklet64> mTrackletArray64; // Array of TRDtrackletMCM which contains MC information in addition to the tracklet word
   o2::dataformats::MCTruthContainer<o2::MCCompLabel> mTrackletLabels;
   std::vector<int> mZSMap;              // Zero suppression map (1 dimensional projection)
 
@@ -350,7 +341,6 @@ class TrapSimulator
   static bool mgStoreClusters; // whether to store all clusters in the tracklets
   bool mDataIsSet = false;
   Calibrations* mCalib;
-  static constexpr bool debugheaders = false;
 };
 
 std::ostream& operator<<(std::ostream& os, const TrapSimulator& mcm);

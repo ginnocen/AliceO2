@@ -400,6 +400,18 @@ void DataProcessingDevice::fillContext(DataProcessorContext& context)
   context.statefulProcess = &mStatefulProcess;
   context.statelessProcess = &mStatelessProcess;
   context.error = &mError;
+  /// Callbacks for services to be executed before every process method invokation
+  context.preProcessingHandles = &mPreProcessingHandles;
+  /// Callbacks for services to be executed after every process method invokation
+  context.postProcessingHandles = &mPostProcessingHandles;
+  /// Callbacks for services to be executed before every process method invokation
+  context.preDanglingHandles = &mPreDanglingHandles;
+  /// Callbacks for services to be executed after every process method invokation
+  context.postDanglingHandles = &mPostDanglingHandles;
+  /// Callbacks for services to be executed before every EOS user callback invokation
+  context.preEOSHandles = &mPreEOSHandles;
+  /// Callbacks for services to be executed after every EOS user callback invokation
+  context.postEOSHandles = &mPostEOSHandles;
   /// Callback for the error handling
   context.errorHandling = &mErrorHandling;
   context.errorCount = &mErrorCount;
@@ -502,8 +514,9 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
   context.completed->reserve(16);
   *context.wasActive |= DataProcessingDevice::tryDispatchComputation(context, *context.completed);
   DanglingContext danglingContext{*context.registry};
-
-  context.registry->preDanglingCallbacks(danglingContext);
+  for (auto preDanglingHandle : *context.preDanglingHandles) {
+    preDanglingHandle.callback(danglingContext, preDanglingHandle.service);
+  }
   if (*context.wasActive == false) {
     context.registry->get<CallbackService>()(CallbackService::Id::Idle);
   }
@@ -513,7 +526,9 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
   context.completed->clear();
   *context.wasActive |= DataProcessingDevice::tryDispatchComputation(context, *context.completed);
 
-  context.registry->postDanglingCallbacks(danglingContext);
+  for (auto postDanglingHandle : *context.postDanglingHandles) {
+    postDanglingHandle.callback(danglingContext, postDanglingHandle.service);
+  }
 
   // If we got notified that all the sources are done, we call the EndOfStream
   // callback and return false. Notice that what happens next is actually
@@ -532,11 +547,13 @@ void DataProcessingDevice::doRun(DataProcessorContext& context)
       context.relayer->processDanglingInputs(*context.expirationHandlers, *context.registry);
     }
     EndOfStreamContext eosContext{*context.registry, *context.allocator};
-
-    context.registry->preEOSCallbacks(eosContext);
+    for (auto& eosHandle : *context.preEOSHandles) {
+      eosHandle.callback(eosContext, eosHandle.service);
+    }
     context.registry->get<CallbackService>()(CallbackService::Id::EndOfStream, eosContext);
-    context.registry->postEOSCallbacks(eosContext);
-
+    for (auto& eosHandle : *context.postEOSHandles) {
+      eosHandle.callback(eosContext, eosHandle.service);
+    }
     for (auto& channel : context.spec->outputChannels) {
       DataProcessingHelpers::sendEndOfStream(*context.device, channel);
     }
@@ -929,7 +946,9 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
     ProcessingContext processContext{record, *context.registry, *context.allocator};
     {
       ZoneScopedN("service pre processing");
-      context.registry->preProcessingCallbacks(processContext);
+      for (auto& handle : *context.preProcessingHandles) {
+        handle.callback(processContext, handle.service);
+      }
     }
     if (action.op == CompletionPolicy::CompletionOp::Discard) {
       if (context.spec->forwards.empty() == false) {
@@ -954,7 +973,9 @@ bool DataProcessingDevice::tryDispatchComputation(DataProcessorContext& context,
 
         {
           ZoneScopedN("service post processing");
-          context.registry->postProcessingCallbacks(processContext);
+          for (auto& handle : *context.postProcessingHandles) {
+            handle.callback(processContext, handle.service);
+          }
         }
       }
     } catch (std::exception& e) {
@@ -992,6 +1013,28 @@ void DataProcessingDevice::error(const char* msg)
   LOG(ERROR) << msg;
   mErrorCount++;
   mServiceRegistry.get<Monitoring>().send(Metric{mErrorCount, "errors"}.addTag(Key::Subsystem, Value::DPL));
+}
+
+void DataProcessingDevice::bindService(ServiceSpec const& spec, void* service)
+{
+  if (spec.preProcessing) {
+    mPreProcessingHandles.push_back(ServiceProcessingHandle{spec.preProcessing, service});
+  }
+  if (spec.postProcessing) {
+    mPostProcessingHandles.push_back(ServiceProcessingHandle{spec.postProcessing, service});
+  }
+  if (spec.preDangling) {
+    mPreDanglingHandles.push_back(ServiceDanglingHandle{spec.preDangling, service});
+  }
+  if (spec.postDangling) {
+    mPostDanglingHandles.push_back(ServiceDanglingHandle{spec.postDangling, service});
+  }
+  if (spec.preEOS) {
+    mPreEOSHandles.push_back(ServiceEOSHandle{spec.preEOS, service});
+  }
+  if (spec.postEOS) {
+    mPostEOSHandles.push_back(ServiceEOSHandle{spec.postEOS, service});
+  }
 }
 
 } // namespace o2::framework

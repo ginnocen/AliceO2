@@ -39,40 +39,51 @@ void SymbolStatistics::rescaleToNBits(size_t bits)
 
   size_t cumulatedFrequencies = mCumulativeFrequencyTable.back();
 
-  std::vector<uint32_t> sortIdx;
-  sortIdx.reserve(mNUsedAlphabetSymbols);
-
   // resample distribution based on cumulative frequencies_
-  for (size_t i = 0; i < mFrequencyTable.size(); i++) {
-    if (mFrequencyTable[i]) {
-      sortIdx.push_back(i); // we will sort only those memorize only those entries which can be used
-    }
-  }
+  for (size_t i = 1; i <= mFrequencyTable.size(); i++)
+    mCumulativeFrequencyTable[i] =
+      (static_cast<uint64_t>(newCumulatedFrequency) *
+       mCumulativeFrequencyTable[i]) /
+      cumulatedFrequencies;
 
-  std::sort(sortIdx.begin(), sortIdx.end(), [this](uint32_t i, uint32_t j) { return this->getFrequency(i) < this->getFrequency(j); });
-  size_t need_shift = 0;
-  for (size_t i = 0; i < sortIdx.size(); i++) {
-    if (static_cast<uint64_t>(getFrequency(sortIdx[i])) * (newCumulatedFrequency - need_shift) / cumulatedFrequencies >= 1) {
-      break;
-    }
-    need_shift++;
-  }
-
-  size_t shift = 0;
-  auto beforeUpdate = mCumulativeFrequencyTable[0];
+  // if we nuked any non-0 frequency symbol to 0, we need to steal
+  // the range to make the frequency nonzero from elsewhere.
+  //
+  // this is not at all optimal, i'm just doing the first thing that comes to
+  // mind.
   for (size_t i = 0; i < mFrequencyTable.size(); i++) {
-    if (mFrequencyTable[i] && static_cast<uint64_t>(mCumulativeFrequencyTable[i + 1] - beforeUpdate) * (newCumulatedFrequency - need_shift) / cumulatedFrequencies < 1) {
-      shift++;
+    if (mFrequencyTable[i] &&
+        mCumulativeFrequencyTable[i + 1] == mCumulativeFrequencyTable[i]) {
+      // symbol i was set to zero freq
+
+      // find best symbol to steal frequency from (try to steal from low-freq
+      // ones)
+      std::pair<size_t, size_t> stealFromEntry{mFrequencyTable.size(), ~0u};
+      for (size_t j = 0; j < mFrequencyTable.size(); j++) {
+        uint32_t frequency =
+          mCumulativeFrequencyTable[j + 1] - mCumulativeFrequencyTable[j];
+        if (frequency > 1 && frequency < stealFromEntry.second) {
+          stealFromEntry.second = frequency;
+          stealFromEntry.first = j;
+        }
+      }
+      assert(stealFromEntry.first != mFrequencyTable.size());
+
+      // and steal from it!
+      if (stealFromEntry.first < i) {
+        for (size_t j = stealFromEntry.first + 1; j <= i; j++)
+          mCumulativeFrequencyTable[j]--;
+      } else {
+        assert(stealFromEntry.first > i);
+        for (size_t j = i + 1; j <= stealFromEntry.first; j++)
+          mCumulativeFrequencyTable[j]++;
+      }
     }
-    beforeUpdate = mCumulativeFrequencyTable[i + 1];
-    mCumulativeFrequencyTable[i + 1] = (static_cast<uint64_t>(newCumulatedFrequency - need_shift) * mCumulativeFrequencyTable[i + 1]) / cumulatedFrequencies + shift;
   }
-  assert(shift == need_shift);
 
   // calculate updated freqs and make sure we didn't screw anything up
   assert(mCumulativeFrequencyTable.front() == 0 &&
          mCumulativeFrequencyTable.back() == newCumulatedFrequency);
-
   for (size_t i = 0; i < mFrequencyTable.size(); i++) {
     if (mFrequencyTable[i] == 0)
       assert(mCumulativeFrequencyTable[i + 1] == mCumulativeFrequencyTable[i]);
@@ -80,7 +91,8 @@ void SymbolStatistics::rescaleToNBits(size_t bits)
       assert(mCumulativeFrequencyTable[i + 1] > mCumulativeFrequencyTable[i]);
 
     // calc updated freq
-    mFrequencyTable[i] = getFrequency(i);
+    mFrequencyTable[i] =
+      mCumulativeFrequencyTable[i + 1] - mCumulativeFrequencyTable[i];
   }
   //	    for(int i = 0; i<static_cast<int>(freqs.getNumSymbols()); i++){
   //	    	std::cout << i << ": " << i + min_ << " " << freqs[i] << " " <<

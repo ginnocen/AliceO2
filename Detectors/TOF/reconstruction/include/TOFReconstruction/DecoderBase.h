@@ -41,10 +41,6 @@ class DecoderBaseT
   inline bool run()
   {
     rewind();
-    if (mDecoderCONET) {
-      mDecoderPointerMax = reinterpret_cast<const uint32_t*>(mDecoderBuffer + mDecoderBufferSize);
-      return processDRM();
-    }
     while (!processHBF())
       ;
     return false;
@@ -58,7 +54,6 @@ class DecoderBaseT
   void setDecoderVerbose(bool val) { mDecoderVerbose = val; };
   void setDecoderBuffer(const char* val) { mDecoderBuffer = val; };
   void setDecoderBufferSize(long val) { mDecoderBufferSize = val; };
-  void setDecoderCONET(bool val) { mDecoderCONET = val; };
 
  private:
   /** handlers **/
@@ -93,7 +88,6 @@ class DecoderBaseT
   bool mDecoderVerbose = false;
   bool mDecoderError = false;
   bool mDecoderFatal = false;
-  bool mDecoderCONET = false;
   char mDecoderSaveBuffer[1048576];
   uint32_t mDecoderSaveBufferDataSize = 0;
   uint32_t mDecoderSaveBufferDataLeft = 0;
