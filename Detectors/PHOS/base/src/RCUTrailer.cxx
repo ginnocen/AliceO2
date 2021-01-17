@@ -11,10 +11,16 @@
 #include <cmath>
 #include <iostream>
 #include <fmt/format.h>
+#include "FairLogger.h"
 #include "CommonConstants/LHCConstants.h"
 #include "PHOSBase/RCUTrailer.h"
 
 using namespace o2::phos;
+
+RCUTrailer::RCUTrailer(const gsl::span<const uint32_t> payloadwords)
+{
+  constructFromRawPayload(payloadwords);
+}
 
 void RCUTrailer::reset()
 {
@@ -55,7 +61,7 @@ void RCUTrailer::constructFromRawPayload(const gsl::span<const uint32_t> payload
   for (; trailerSize > 0; trailerSize--) {
     word = payloadwords[--index];
     if ((word >> 30) != 2) {
-      std::cerr << "Missing RCU trailer identifier pattern!\n";
+      LOG(ERROR) << "Missing RCU trailer identifier pattern!";
       continue;
     }
     int parCode = (word >> 26) & 0xF;
@@ -91,7 +97,7 @@ void RCUTrailer::constructFromRawPayload(const gsl::span<const uint32_t> payload
         mAltroCFG2 = parData & 0x1FFFFFF;
         break;
       default:
-        std::cerr << "Undefined parameter code " << parCode << ", ignore it !\n";
+        LOG(ERROR) << "Undefined parameter code " << parCode << ", ignore it !";
         break;
     }
   }

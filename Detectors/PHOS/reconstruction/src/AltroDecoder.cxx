@@ -12,6 +12,7 @@
 #include "InfoLogger/InfoLogger.hxx"
 #include "PHOSReconstruction/AltroDecoder.h"
 #include "PHOSReconstruction/RawReaderMemory.h"
+#include "PHOSReconstruction/RawDecodingError.h"
 
 #include "DetectorsRaw/RDHUtils.h"
 #include <FairLogger.h>
@@ -46,9 +47,9 @@ AltroDecoderError::ErrorType_t AltroDecoder::decode()
 void AltroDecoder::readRCUTrailer()
 {
   try {
-    auto payloadwordsOrig = mRawReader.getPayload().getPayloadWords();
-    gsl::span<const uint32_t> payloadwords(payloadwordsOrig.data(), payloadwordsOrig.size());
-    mRCUTrailer.constructFromRawPayload(payloadwords);
+    auto payloadwords = mRawReader.getPayload().getPayloadWords();
+    gsl::span<const uint32_t> tmp(payloadwords.data(), payloadwords.size());
+    mRCUTrailer.constructFromRawPayload(tmp);
   } catch (RCUTrailer::Error& e) {
     throw e;
   }
@@ -64,16 +65,25 @@ void AltroDecoder::readChannels()
   mChannels.clear();
   int currentpos = 0;
   auto& buffer = mRawReader.getPayload().getPayloadWords();
-  while (currentpos < buffer.size() - mRCUTrailer.getTrailerSize()) {
+
+  int payloadend = mRCUTrailer.getPayloadSize();
+  while (currentpos < payloadend) {
     auto currentword = buffer[currentpos++];
-    if (currentword >> 30 != 1) {
+    ChannelHeader header = {currentword};
+
+    if (header.mMark != 1) {
+      LOG(ERROR) << "Channel header mark not found";
       continue;
     }
     // starting a new channel
-    mChannels.emplace_back(currentword & 0xFFF, (currentword >> 16) & 0x3FF);
+    mChannels.emplace_back(int(header.mHardwareAddress), int(header.mPayloadSize));
     auto& currentchannel = mChannels.back();
     /// decode all words for channel
     int numberofwords = (currentchannel.getPayloadSize() + 2) / 3;
+    if (numberofwords > payloadend - currentpos) {
+      LOG(ERROR) << "Channel payload " << numberofwords << " larger than left in total " << payloadend - currentpos;
+      continue;
+    }
     std::vector<uint16_t> bunchwords;
     for (int iword = 0; iword < numberofwords; iword++) {
       currentword = buffer[currentpos++];
@@ -99,14 +109,6 @@ void AltroDecoder::readChannels()
     }
   }
   mChannelsInitialized = true;
-}
-
-const RCUTrailer& AltroDecoder::getRCUTrailer() const
-{
-  if (!mRCUTrailer.isInitialized()) {
-    throw AltroDecoderError::ErrorType_t::RCU_TRAILER_ERROR; // "RCU trailer was not initialized");
-  }
-  return mRCUTrailer;
 }
 
 const std::vector<Channel>& AltroDecoder::getChannels() const

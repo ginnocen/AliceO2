@@ -85,8 +85,9 @@ AddOptionRTC(loopInterpolationInExtraPass, char, -1, "", 0, "Perform loop interp
 AddOptionRTC(mergerReadFromTrackerDirectly, char, 1, "", 0, "Forward data directly from tracker to merger on GPU")
 AddOptionRTC(useMatLUT, char, 0, "", 0, "Use material lookup table for TPC refit")
 AddOptionRTC(trdStopTrkAfterNMissLy, unsigned char, 6, "", 0, "Abandon track following after N layers without a TRD match")
+AddOptionRTC(trackingRefitGPUModel, char, 1, "", 0, "Use GPU track model for the Global Track Refit")
 AddCustomCPP(void SetMinTrackPt(float v) { MaxTrackQPt = v > 0.001 ? (1. / v) : (1. / 0.001); })
-AddVariable(dummyRTC, float, 0.f) // Ensure non empty struct and proper alignment even if all normal members are constexpr
+AddVariable(dummyRTC, void*, nullptr) // Ensure non empty struct and proper alignment even if all normal members are constexpr
 AddHelp("help", 'h')
 EndConfig()
 
@@ -120,7 +121,7 @@ AddOption(mergerSortTracks, int, -1, "", 0, "Sort track indizes for GPU track fi
 AddOption(tpcCompressionGatherMode, int, -1, "", 0, "TPC Compressed Clusters Gather Mode (0: DMA transfer gather gpu to host, 1: serial DMA to host and gather by copy on CPU, 2. gather via GPU kernal DMA access, 3. gather on GPU via kernel, dma afterwards")
 AddOption(tpcCompressionGatherModeKernel, int, -1, "", 0, "TPC Compressed Clusters Gather Mode Kernel (0: unbufferd, 1-3: buffered, 4: multi-block)")
 AddOption(runMC, bool, false, "", 0, "Process MC labels")
-AddOption(ompKernels, bool, true, "", 0, "Parallelize with OMP inside kernels instead of over slices")
+AddOption(ompKernels, unsigned char, 2, "", 0, "Parallelize with OMP inside kernels instead of over slices, 2 for nested parallelization over TPC sectors and inside kernels")
 AddOption(doublePipeline, bool, false, "", 0, "Double pipeline mode")
 AddOption(prefetchTPCpageScan, int, 0, "", 0, "Prefetch Data for TPC page scan in CPU cache")
 AddOption(debugLevel, int, -1, "debug", 'd', "Set debug level (-1 = silend)")
@@ -202,6 +203,8 @@ AddOption(noMC, bool, false, "", 0, "Force running QA without MC labels even if 
 AddOption(shipToQC, bool, false, "", 0, "Do not write output files but ship histograms for QC")
 AddOption(shipToQCAsCanvas, bool, false, "", 0, "Send TCanvases with full layout to QC instead of individual histograms")
 AddOption(enableLocalOutput, bool, true, "", 0, "Enable normal output to local PDF files / console")
+AddOption(clusterRejectionHistograms, bool, false, "", 0, "Fill histograms with cluster rejection statistics")
+AddOption(histMaxNClusters, unsigned int, 500000000, "", 0, "Maximum number of clusters in rejection histograms")
 AddShortcut("compare", 0, "--QAinput", "Compare QA histograms", "--qa", "--QAinputHistogramsOnly")
 AddHelp("help", 'h')
 EndConfig()
@@ -342,7 +345,7 @@ AddVariableRTC(dodEdx, char, 0)              // Do dEdx computation
 AddVariableRTC(earlyTpcTransform, char, 0)   // do Early TPC transformation
 AddVariableRTC(debugLevel, char, 0)          // Debug level
 AddVariableRTC(continuousMaxTimeBin, int, 0) // Max time bin for continuous tracking
-AddVariable(dummyRTC, float, 0.f)            // Ensure non empty struct and proper alignment even if all normal members are constexpr
+AddVariable(dummyRTC, void*, nullptr)        // Ensure non empty struct and proper alignment even if all normal members are constexpr
 EndConfig()
 
 EndNamespace() // gpu
