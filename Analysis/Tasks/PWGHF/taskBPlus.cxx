@@ -153,7 +153,7 @@ struct TaskBplus {
             auto bachTrack = getTrackParCov(track);
 
             // build the neutral track to then build the B
-            auto trackD0 = o2::dataformats::V0(vertexD0, momentumD0, prong0TrackParCov, prong1TrackParCov, candidate.index0Id(), candidate.index1Id());
+            auto trackD0 = o2::dataformats::V0(vertexD0, momentumD0, prong0TrackParCov, prong1TrackParCov, prong0.globalIndex(), prong1.globalIndex());
 
             std::array<float, 3> pvecD0 = {0., 0., 0.};
             std::array<float, 3> pvecbach = {0., 0., 0.};
