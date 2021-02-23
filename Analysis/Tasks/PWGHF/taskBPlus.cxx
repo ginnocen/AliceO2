@@ -96,13 +96,13 @@ struct TaskBplus {
   {
 
     //Define o2 fitter, 2-prong
-    o2::vertexing::DCAFitterN<2> fitter;
-    fitter.setBz(d_bz);
-    fitter.setPropagateToPCA(b_propdca);
-    fitter.setMaxR(d_maxr);
-    fitter.setMinParamChange(d_minparamchange);
-    fitter.setMinRelChi2Change(d_minrelchi2change);
-    fitter.setUseAbsDCA(d_UseAbsDCA);
+    o2::vertexing::DCAFitterN<2> bfitter;
+    bfitter.setBz(d_bz);
+    bfitter.setPropagateToPCA(b_propdca);
+    bfitter.setMaxR(d_maxr);
+    bfitter.setMinParamChange(d_minparamchange);
+    bfitter.setMinRelChi2Change(d_minrelchi2change);
+    bfitter.setUseAbsDCA(d_UseAbsDCA);
 
     //Loop over D0 candi
     for (auto& candidate : candidates) {
@@ -128,14 +128,29 @@ struct TaskBplus {
 
         auto prong0 = candidate.index0_as<aod::BigTracks>();
         auto prong1 = candidate.index1_as<aod::BigTracks>();
+        auto prong0TrackParCov = getTrackParCov(prong0); //Is this ok?
+        auto prong1TrackParCov = getTrackParCov(prong1); //Is this ok?
 
-       // LOGF(INFO, "All track: %d (prong0); %d (prong1)", candidate.index0().globalIndex(), candidate.index1().globalIndex());
-       // LOGF(INFO, "All track pT: %f (prong0); %f (prong1)", prong0.pt(), prong1.pt());
+        // LOGF(INFO, "All track: %d (prong0); %d (prong1)", candidate.index0().globalIndex(), candidate.index1().globalIndex());
+        // LOGF(INFO, "All track pT: %f (prong0); %f (prong1)", prong0.pt(), prong1.pt());
 
-        auto prong0TrackParCov = getTrackParCov(prong0);
-        prong0TrackParCov.propagateTo(prong0.x(), d_bz); //Lc has fitter.getTrack(0).getX(). Not the same as prong.x(). Need to include info to D0 table?
-        auto prong1TrackParCov = getTrackParCov(prong1);
-        prong1TrackParCov.propagateTo(prong1.x(), d_bz); //Lc has fitter.getTrack(0).getX(). Not the same as prong.x(). Need to include info to D0 table?
+        //Redo D-vertex to get extrapolated daughter tracks
+        o2::vertexing::DCAFitterN<2> df;
+        df.setBz(d_bz);
+        df.setPropagateToPCA(b_propdca);
+        df.setMaxR(d_maxr);
+        df.setMinParamChange(d_minparamchange);
+        df.setMinRelChi2Change(d_minrelchi2change);
+        df.setUseAbsDCA(d_UseAbsDCA);
+
+        // reconstruct D0 secondary vertex
+        if (df.process(prong0TrackParCov, prong1TrackParCov) == 0) {
+          continue;
+        }
+          
+        //Propogate prong tracks to extrapolated track position.
+        prong0TrackParCov.propagateTo(df.getTrack(0).getX(), d_bz);
+        prong1TrackParCov.propagateTo(df.getTrack(1).getX(), d_bz);
 
         //loop over tracks for pi selection
         auto count = 0;
@@ -153,20 +168,20 @@ struct TaskBplus {
             auto bachTrack = getTrackParCov(track);
 
             // build the neutral track to then build the B
-            auto trackD0 = o2::dataformats::V0(vertexD0, momentumD0, prong0TrackParCov, prong1TrackParCov, prong0.globalIndex(), prong1.globalIndex());
+            auto trackD0 = o2::dataformats::V0(vertexD0, momentumD0, prong0TrackParCov, prong1TrackParCov, {0, 0}, {0, 0});
 
             std::array<float, 3> pvecD0 = {0., 0., 0.};
             std::array<float, 3> pvecbach = {0., 0., 0.};
             std::array<float, 3> pvecBCand = {0., 0., 0.};
 
             //find the DCA between the D0 and the bachelor track, for B+
-            int nCand = fitter.process(trackD0, bachTrack); //Plot nCand
+            int nCand = bfitter.process(trackD0, bachTrack); //Plot nCand
 
             if(nCand == 0) continue;
 
-            fitter.propagateTracksToVertex();        // propagate the bachelor and D0 to the B+ vertex
-            fitter.getTrack(0).getPxPyPzGlo(pvecD0); //momentum of D0 at the B+ vertex; Need to fill new D0+ pT
-            fitter.getTrack(1).getPxPyPzGlo(pvecbach); //momentum of pi+ at the B+ vertex; Need to fill new p+ pT
+            bfitter.propagateTracksToVertex();        // propagate the bachelor and D0 to the B+ vertex
+            bfitter.getTrack(0).getPxPyPzGlo(pvecD0); //momentum of D0 at the B+ vertex; Need to fill new D0+ pT
+            bfitter.getTrack(1).getPxPyPzGlo(pvecbach); //momentum of pi+ at the B+ vertex; Need to fill new p+ pT
 
             pvecBCand = array{pvecbach[0] + pvecD0[0],
               pvecbach[1] + pvecD0[1],
