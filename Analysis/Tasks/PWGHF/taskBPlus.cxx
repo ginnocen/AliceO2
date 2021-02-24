@@ -94,8 +94,7 @@ struct TaskBplus {
 
   void process(aod::Collision const& collisions, aod::BigTracks const& tracks, soa::Filtered<soa::Join<aod::HfCandProng2, aod::HFSelD0Candidate, aod::Colls>> const& candidates)
   {
-
-    //Define o2 fitter, 2-prong
+    //Initialise fitter for B vertex
     o2::vertexing::DCAFitterN<2> bfitter;
     bfitter.setBz(d_bz);
     bfitter.setPropagateToPCA(b_propdca);
@@ -103,6 +102,15 @@ struct TaskBplus {
     bfitter.setMinParamChange(d_minparamchange);
     bfitter.setMinRelChi2Change(d_minrelchi2change);
     bfitter.setUseAbsDCA(d_UseAbsDCA);
+
+    //Initial fitter to redo D-vertex to get extrapolated daughter tracks
+    o2::vertexing::DCAFitterN<2> df;
+    df.setBz(d_bz);
+    df.setPropagateToPCA(b_propdca);
+    df.setMaxR(d_maxr);
+    df.setMinParamChange(d_minparamchange);
+    df.setMinRelChi2Change(d_minrelchi2change);
+    df.setUseAbsDCA(d_UseAbsDCA);
 
     //Loop over D0 candi
     for (auto& candidate : candidates) {
@@ -113,87 +121,81 @@ struct TaskBplus {
         continue;
       }
 
-      if (candidate.isSelD0bar() >= d_selectionFlagD0bar || candidate.isSelD0() >= d_selectionFlagD0)
-      {
-        if (candidate.isSelD0bar() >= d_selectionFlagD0bar)
-          registry.fill(HIST("hmassD0"), InvMassD0bar(candidate));
-        if(candidate.isSelD0() >= d_selectionFlagD0)
-          registry.fill(HIST("hmassD0"), InvMassD0(candidate));
-        registry.fill(HIST("hptD0prong0"), candidate.ptProng0());
-        registry.fill(HIST("hptD0prong1"), candidate.ptProng1());
-        registry.fill(HIST("hEtaD0"), candidate.eta());
+      if ((candidate.isSelD0bar() < d_selectionFlagD0bar) && (candidate.isSelD0() < d_selectionFlagD0))
+        continue;
 
-        const std::array<float, 3> vertexD0 = {candidate.xSecondaryVertex(), candidate.ySecondaryVertex(), candidate.zSecondaryVertex()};
-        const std::array<float, 3> momentumD0 = {candidate.px(), candidate.py(), candidate.pz()};
+      if (candidate.isSelD0bar() >= d_selectionFlagD0bar)
+        registry.fill(HIST("hmassD0"), InvMassD0bar(candidate));
+      if(candidate.isSelD0() >= d_selectionFlagD0)
+        registry.fill(HIST("hmassD0"), InvMassD0(candidate));
+      registry.fill(HIST("hptD0prong0"), candidate.ptProng0());
+      registry.fill(HIST("hptD0prong1"), candidate.ptProng1());
+      registry.fill(HIST("hEtaD0"), candidate.eta());
 
-        auto prong0 = candidate.index0_as<aod::BigTracks>();
-        auto prong1 = candidate.index1_as<aod::BigTracks>();
-        auto prong0TrackParCov = getTrackParCov(prong0); //Is this ok?
-        auto prong1TrackParCov = getTrackParCov(prong1); //Is this ok?
+      const std::array<float, 3> vertexD0 = {candidate.xSecondaryVertex(), candidate.ySecondaryVertex(), candidate.zSecondaryVertex()};
+      const std::array<float, 3> momentumD0 = {candidate.px(), candidate.py(), candidate.pz()};
 
-        // LOGF(INFO, "All track: %d (prong0); %d (prong1)", candidate.index0().globalIndex(), candidate.index1().globalIndex());
-        // LOGF(INFO, "All track pT: %f (prong0); %f (prong1)", prong0.pt(), prong1.pt());
+      auto prong0 = candidate.index0_as<aod::BigTracks>();
+      auto prong1 = candidate.index1_as<aod::BigTracks>();
+      auto prong0TrackParCov = getTrackParCov(prong0);
+      auto prong1TrackParCov = getTrackParCov(prong1);
 
-        //Redo D-vertex to get extrapolated daughter tracks
-        o2::vertexing::DCAFitterN<2> df;
-        df.setBz(d_bz);
-        df.setPropagateToPCA(b_propdca);
-        df.setMaxR(d_maxr);
-        df.setMinParamChange(d_minparamchange);
-        df.setMinRelChi2Change(d_minrelchi2change);
-        df.setUseAbsDCA(d_UseAbsDCA);
+      // LOGF(INFO, "All track: %d (prong0); %d (prong1)", candidate.index0().globalIndex(), candidate.index1().globalIndex());
+      // LOGF(INFO, "All track pT: %f (prong0); %f (prong1)", prong0.pt(), prong1.pt());
 
-        // reconstruct D0 secondary vertex
-        if (df.process(prong0TrackParCov, prong1TrackParCov) == 0) {
-          continue;
+      // reconstruct D0 secondary vertex
+      if (df.process(prong0TrackParCov, prong1TrackParCov) == 0) {
+        continue;
+      }
+
+      //Propogate prong tracks to extrapolated track position.
+      prong0TrackParCov.propagateTo(df.getTrack(0).getX(), d_bz);
+      prong1TrackParCov.propagateTo(df.getTrack(1).getX(), d_bz);
+
+      // build a D0 neutral track
+      auto trackD0 = o2::dataformats::V0(vertexD0, momentumD0, prong0TrackParCov, prong1TrackParCov, {0, 0}, {0, 0});
+
+      //loop over tracks for pi selection
+      auto count = 0;
+      for (auto &track : tracks) {
+        if (count % 100 == 0) {
+          LOGF(INFO, "Col: %d (cand); %d (track)", candidate.collisionId(), track.collisionId());
+          count++;
         }
-          
-        //Propogate prong tracks to extrapolated track position.
-        prong0TrackParCov.propagateTo(df.getTrack(0).getX(), d_bz);
-        prong1TrackParCov.propagateTo(df.getTrack(1).getX(), d_bz);
 
-        //loop over tracks for pi selection
-        auto count = 0;
-        for (auto &track : tracks) {
-          if (count % 100 == 0) {
-            LOGF(INFO, "Col: %d (cand); %d (track)", candidate.collisionId(), track.collisionId());
-            count++;
-          }
-          if ((candidate.isSelD0() >= d_selectionFlagD0 && track.signed1Pt() < 0) || candidate.isSelD0bar() >= d_selectionFlagD0bar && track.signed1Pt() > 0){ //D0pi- or D0(bar)pi+
-            if(candidate.index0Id() == track.globalIndex() || candidate.index1Id() == track.globalIndex())
-              continue; //daughter track id and bachelor track id not the same
+        if(candidate.isSelD0() >= d_selectionFlagD0 && track.signed1Pt() > 0)
+          continue; //to select D0pi- pair
+        if(candidate.isSelD0bar() >= d_selectionFlagD0bar && track.signed1Pt() < 0)
+          continue; //to select D0(bar)pi+ pair
 
-            registry.fill(HIST("hptcand"), candidate.pt() + track.pt());
+        if(candidate.index0Id() == track.globalIndex() || candidate.index1Id() == track.globalIndex())
+          continue; //daughter track id and bachelor track id not the same
 
-            auto bachTrack = getTrackParCov(track);
+        registry.fill(HIST("hptcand"), candidate.pt() + track.pt());
 
-            // build the neutral track to then build the B
-            auto trackD0 = o2::dataformats::V0(vertexD0, momentumD0, prong0TrackParCov, prong1TrackParCov, {0, 0}, {0, 0});
+        auto bachTrack = getTrackParCov(track);
 
-            std::array<float, 3> pvecD0 = {0., 0., 0.};
-            std::array<float, 3> pvecbach = {0., 0., 0.};
-            std::array<float, 3> pvecBCand = {0., 0., 0.};
+        std::array<float, 3> pvecD0 = {0., 0., 0.};
+        std::array<float, 3> pvecbach = {0., 0., 0.};
+        std::array<float, 3> pvecBCand = {0., 0., 0.};
 
-            //find the DCA between the D0 and the bachelor track, for B+
-            int nCand = bfitter.process(trackD0, bachTrack); //Plot nCand
+        //find the DCA between the D0 and the bachelor track, for B+
+        int nCand = bfitter.process(trackD0, bachTrack); //Plot nCand
+        if(nCand == 0) continue;
 
-            if(nCand == 0) continue;
+        bfitter.propagateTracksToVertex();        // propagate the bachelor and D0 to the B+ vertex
+        bfitter.getTrack(0).getPxPyPzGlo(pvecD0); //momentum of D0 at the B+ vertex; Need to fill new D0+ pT
+        bfitter.getTrack(1).getPxPyPzGlo(pvecbach); //momentum of pi+ at the B+ vertex; Need to fill new p+ pT
 
-            bfitter.propagateTracksToVertex();        // propagate the bachelor and D0 to the B+ vertex
-            bfitter.getTrack(0).getPxPyPzGlo(pvecD0); //momentum of D0 at the B+ vertex; Need to fill new D0+ pT
-            bfitter.getTrack(1).getPxPyPzGlo(pvecbach); //momentum of pi+ at the B+ vertex; Need to fill new p+ pT
+        pvecBCand = array{pvecbach[0] + pvecD0[0],
+          pvecbach[1] + pvecD0[1],
+          pvecbach[2] + pvecD0[2]};
 
-            pvecBCand = array{pvecbach[0] + pvecD0[0],
-              pvecbach[1] + pvecD0[1],
-              pvecbach[2] + pvecD0[2]};
+        // invariant mass
+        auto arrMom = array{pvecbach, pvecD0};
+        double massBP = RecoDecay::M(arrMom, array{massPi, massD0}); //Plot B+ mass
 
-            // invariant mass
-            auto arrMom = array{pvecbach, pvecD0};
-            double massBP = RecoDecay::M(arrMom, array{massPi, massD0}); //Plot B+ mass
-
-          } //D0 and pi charge
-        } //track loop
-      }//D0 selection
+      } //track loop
     }//D0 cand loop
   } //process
 }; //struct
