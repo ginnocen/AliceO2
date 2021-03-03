@@ -72,6 +72,7 @@ struct TaskBplus {
         {"hptBachTrk","pi track; #it{p}_{T} (GeV/#it{c});entries",{HistType::kTH1F, {{100, 0., 10.}}}},
         {"hptD0inTrkLoop","D0 Cand(inside track loop); #it{p}_{T} (GeV/#it{c});entries",{HistType::kTH1F, {{100, 0., 10.}}}},
         {"hptcand", "D0+pi candidates; #it{p}_{T} (GeV/#it{c});entries", {HistType::kTH1F, {{100, 0., 10.}}}},
+        {"hBVtxDecayLength","B Candidates;decay length xy (cm);entries", {HistType::kTH1F, {{200, 0., 2.}}}},
         {"hpTBCand","B Candidates; #it{p}_{T} (GeV/#it{c});entries",{HistType::kTH1F, {{100, 0., 10.}}}},
         {"hpTBprongD0","B prong D0; #it{p}_{T} (GeV/#it{c});entries",{HistType::kTH1F, {{100, 0., 10.}}}},
         {"hpTBprongpi","B prong pi; #it{p}_{T} (GeV/#it{c});entries",{HistType::kTH1F, {{100, 0., 10.}}}},
@@ -130,10 +131,16 @@ struct TaskBplus {
       if ((candidate.isSelD0bar() < d_selectionFlagD0bar) && (candidate.isSelD0() < d_selectionFlagD0))
         continue;
 
-      if (candidate.isSelD0bar() >= d_selectionFlagD0bar)
+        double D0InvMass = -1;
+        if (candidate.isSelD0bar() >= d_selectionFlagD0bar){
         registry.fill(HIST("hmassD0"), InvMassD0bar(candidate));
-      if(candidate.isSelD0() >= d_selectionFlagD0)
+      D0InvMass = InvMassD0bar(candidate);
+        }
+        if(candidate.isSelD0() >= d_selectionFlagD0)
+        {
         registry.fill(HIST("hmassD0"), InvMassD0(candidate));
+        D0InvMass = InvMassD0(candidate);
+        }
       registry.fill(HIST("hptD0prong0"), candidate.ptProng0());
       registry.fill(HIST("hptD0prong1"), candidate.ptProng1());
       registry.fill(HIST("hEtaD0"), candidate.eta());
@@ -146,9 +153,10 @@ struct TaskBplus {
       auto prong1 = candidate.index1_as<aod::BigTracks>();
       auto prong0TrackParCov = getTrackParCov(prong0);
       auto prong1TrackParCov = getTrackParCov(prong1);
+      auto collision = prong0.collision();
 
-      LOGF(INFO, "All track: %d (prong0); %d (prong1)", candidate.index0().globalIndex(), candidate.index1().globalIndex());
-      LOGF(INFO, "All track pT: %f (prong0); %f (prong1)", prong0.pt(), prong1.pt());
+     // LOGF(INFO, "All track: %d (prong0); %d (prong1)", candidate.index0().globalIndex(), candidate.index1().globalIndex());
+     // LOGF(INFO, "All track pT: %f (prong0); %f (prong1)", prong0.pt(), prong1.pt());
 
       // reconstruct D0 secondary vertex
       if (df.process(prong0TrackParCov, prong1TrackParCov) == 0) {
@@ -165,10 +173,10 @@ struct TaskBplus {
       //loop over tracks for pi selection
       auto count = 0;
       for (auto &track : tracks) {
-        if (count % 100 == 0) {
-          LOGF(INFO, "Col: %d (cand); %d (track)", candidate.collisionId(), track.collisionId());
-          count++;
-        }
+        //if (count % 100 == 0) {
+        //  LOGF(INFO, "Col: %d (cand); %d (track)", candidate.collisionId(), track.collisionId());
+        //  count++;
+       // }
 
         if(candidate.isSelD0() >= d_selectionFlagD0 && track.signed1Pt() > 0)
           continue; //to select D0pi- pair
@@ -195,6 +203,7 @@ struct TaskBplus {
         bfitter.propagateTracksToVertex();        // propagate the bachelor and D0 to the B+ vertex
         bfitter.getTrack(0).getPxPyPzGlo(pvecD0); //momentum of D0 at the B+ vertex
         bfitter.getTrack(1).getPxPyPzGlo(pvecbach); //momentum of pi+ at the B+ vertex
+        const auto& BSecVertex = bfitter.getPCACandidate();
 
         pvecBCand = array{pvecbach[0] + pvecD0[0],
           pvecbach[1] + pvecD0[1],
@@ -206,7 +215,14 @@ struct TaskBplus {
         double pTBP = RecoDecay::Pt(pvecBCand[0],pvecBCand[1]); //pT B+
         double pTBprongD0 = RecoDecay::Pt(pvecD0[0], pvecD0[1]); //pT of B decay prong D0
         double pTBprongpi = RecoDecay::Pt(pvecbach[0], pvecbach[1]); //pT of B decay prong pi
+        double BVtxDecayLength = RecoDecay::distanceXY(array{collision.posX(), collision.posY()}, array{BSecVertex[0], BSecVertex[1]});
 
+        registry.fill(HIST("hBVtxDecayLength"), BVtxDecayLength);
+
+        if(D0InvMass < 1.8 || D0InvMass >1.93) continue;
+        if(BVtxDecayLength < 0.1) continue;
+        if(pTBP < 3) continue;
+          
         registry.fill(HIST("hBCandInvmass"), massBP);
         registry.fill(HIST("hpTBCand"), pTBP);
         registry.fill(HIST("hpTBprongD0"), pTBprongD0);
