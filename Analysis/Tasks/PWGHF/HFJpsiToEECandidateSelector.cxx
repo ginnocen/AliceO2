@@ -227,13 +227,13 @@ struct HFJpsiToEECandidateSelector {
     }
   }
 
-    using Trks = soa::Join<aod::Tracks,aod::BigTracksPID, aod::TracksExtra, aod::RICHs>;
+    using Trks = soa::Join<aod::BigTracksPID, aod::RICHs>;
 
   //void process(aod::HfCandProng2 const& hfCandProng2s, aod::BigTracksPID const& tracks, aod::RICHs const& tracks_rich)
   void process(aod::HfCandProng2 const& hfCandProng2s, Trks const& tracks)
     {
-
-    for (auto& hfCandProng2 : hfCandProng2s) { //looping over 2 prong candidates
+    
+      for (auto& hfCandProng2 : hfCandProng2s) { //looping over 2 prong candidates
 
       auto trackPos = hfCandProng2.index0_as<Trks>(); //positive daughter
       auto trackNeg = hfCandProng2.index1_as<Trks>(); //negative daughter
