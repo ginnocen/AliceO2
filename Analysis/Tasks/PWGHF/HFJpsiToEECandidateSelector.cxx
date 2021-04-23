@@ -18,11 +18,32 @@
 #include "Framework/AnalysisTask.h"
 #include "AnalysisDataModel/HFSecondaryVertex.h"
 #include "AnalysisDataModel/HFCandidateSelectionTables.h"
+#include "ALICE3Analysis/RICH.h"
+
 
 using namespace o2;
 using namespace o2::framework;
 using namespace o2::aod::hf_cand_prong2;
 using namespace o2::analysis::hf_cuts_jpsi_toee;
+
+namespace o2::aod
+{
+
+namespace indices
+{
+DECLARE_SOA_INDEX_COLUMN(Track, track);
+DECLARE_SOA_INDEX_COLUMN(RICH, rich);
+} // namespace indices
+
+DECLARE_SOA_INDEX_TABLE_USER(RICHTracksIndex, Tracks, "RICHTRK", indices::TrackId, indices::RICHId);
+} // namespace o2::aod
+
+struct RICHindexbuilder {
+  Builds<o2::aod::RICHTracksIndex> ind;
+  void init(o2::framework::InitContext&)
+  {
+  }
+};
 
 /// Struct for applying J/ψ → e+ e− selection cuts
 struct HFJpsiToEECandidateSelector {
@@ -38,7 +59,12 @@ struct HFJpsiToEECandidateSelector {
   Configurable<double> d_nSigmaTPC{"d_nSigmaTPC", 3., "Nsigma cut on TPC only"};
   Configurable<std::vector<double>> pTBins{"pTBins", std::vector<double>{hf_cuts_jpsi_toee::pTBins_v}, "pT bin limits"};
   Configurable<LabeledArray<double>> cuts{"Jpsi_to_ee_cuts", {hf_cuts_jpsi_toee::cuts[0], npTBins, nCutVars, pTBinLabels, cutVarLabels}, "Jpsi candidate selection per pT bin"};
-
+ Configurable<double> d_pidRICHMinpT{"d_pidRICHMinpT", 0.15, "Lower bound of track pT for RICH PID"};
+  Configurable<double> d_pidRICHMaxpT{"d_pidRICHMaxpT", 10., "Upper bound of track pT for RICH PID"};
+Configurable<double> d_pidTOFMinpT{"d_pidTOFMinpT", 0.15, "Lower bound of track pT for TOF PID"};
+  Configurable<double> d_pidTOFMaxpT{"d_pidTOFMaxpT", 5., "Upper bound of track pT for TOF PID"};
+  Configurable<double> d_nSigmaTOF{"d_nSigmaTOF", 3., "Nsigma cut on TOF only"};
+  Configurable<double> d_nSigmaRICH{"d_nSigmaRICH", 3., "Nsigma cut on RICH only"};
   /// Selection on goodness of daughter tracks
   /// \note should be applied at candidate selection
   /// \param track is daughter track
@@ -65,7 +91,6 @@ struct HFJpsiToEECandidateSelector {
     if (pTBin == -1) {
       return false;
     }
-
     if (candpT < d_pTCandMin || candpT >= d_pTCandMax) {
       return false; //check that the candidate pT is within the analysis range
     }
@@ -101,6 +126,23 @@ struct HFJpsiToEECandidateSelector {
     return true;
   }
 
+   template <typename T>
+  bool validTOFPID(const T& track)
+  {
+    if (TMath::Abs(track.pt()) < d_pidTOFMinpT || TMath::Abs(track.pt()) >= d_pidTOFMaxpT) {
+      return false;
+    }
+    return true;
+  }
+
+  template <typename T>
+  bool validRICHPID(const T& track)
+  {
+    if (TMath::Abs(track.pt()) < d_pidRICHMinpT || TMath::Abs(track.pt()) >= d_pidRICHMaxpT) {
+      return false;
+    }
+    return true;
+  }
   /// Check if track is compatible with given TPC Nsigma cut for the electron hypothesis
   /// \param track is the track
   /// \param nSigmaCut is the nsigma threshold to test against
@@ -133,13 +175,14 @@ struct HFJpsiToEECandidateSelector {
     }
   }
 
-  void process(aod::HfCandProng2 const& hfCandProng2s, aod::BigTracksPID const&)
+  using Trks = soa::Join<aod::Tracks, aod::RICHTracksIndex, aod::BigTracksPID>;
+  void process(aod::HfCandProng2 const& hfCandProng2s,  const Trks& tracks)
   {
-
+    LOGF(info, "both good rich tracks");
     for (auto& hfCandProng2 : hfCandProng2s) { //looping over 2 prong candidates
 
-      auto trackPos = hfCandProng2.index0_as<aod::BigTracksPID>(); //positive daughter
-      auto trackNeg = hfCandProng2.index1_as<aod::BigTracksPID>(); //negative daughter
+      auto trackPos = hfCandProng2.index0_as<Trks>(); //positive daughter
+      auto trackNeg = hfCandProng2.index1_as<Trks>(); //negative daughter
 
       if (!(hfCandProng2.hfflag() & 1 << DecayType::JpsiToEE)) {
         hfSelJpsiToEECandidate(0);
@@ -165,6 +208,27 @@ struct HFJpsiToEECandidateSelector {
         continue;
       }
 
+      bool pidrichPos = validRICHPID(trackPos);
+        bool pidrichNeg = validRICHPID(trackNeg);
+        if (pidrichPos && pidrichNeg) {
+          LOGF(info, "both good rich tracks");
+        }
+
+        LOGF(info, "cut %f, val pos %f, val neg %f", d_nSigmaRICH, trackPos.rich().richNsigmaEl(), trackNeg.rich().richNsigmaEl());
+        if (pidrichPos && pidrichNeg) {
+          bool selpidrichPos = abs(trackPos.rich().richNsigmaEl()) < d_nSigmaRICH;
+          bool selpidrichNeg = abs(trackNeg.rich().richNsigmaEl()) < d_nSigmaRICH;
+          LOGF(info, "pos %d, neg %d", selpidrichPos, selpidrichNeg);
+          bool selpidrich = selpidrichPos && selpidrichNeg;
+          if (selpidrich) {
+            LOGF(info, "both sel rich tracks");
+          }
+          if (!selpidrich) {
+            hfSelJpsiToEECandidate(0);
+            LOGF(info, "not selectedtracks");
+            continue;
+          }
+        }
       hfSelJpsiToEECandidate(1);
     }
   }
@@ -172,6 +236,6 @@ struct HFJpsiToEECandidateSelector {
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
-  return WorkflowSpec{
+  return WorkflowSpec{adaptAnalysisTask<RICHindexbuilder>(cfgc),
     adaptAnalysisTask<HFJpsiToEECandidateSelector>(cfgc, TaskName{"hf-jpsi-toee-candidate-selector"})};
 }
