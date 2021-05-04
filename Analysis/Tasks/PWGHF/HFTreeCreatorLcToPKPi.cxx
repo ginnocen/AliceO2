@@ -75,6 +75,7 @@ DECLARE_SOA_COLUMN(CPA, cpa, float);
 DECLARE_SOA_COLUMN(CPAXY, cpaXY, float);
 DECLARE_SOA_COLUMN(Ct, ct, float);
 DECLARE_SOA_COLUMN(MCflag, mcflag, int8_t);
+DECLARE_SOA_COLUMN(IsLcToPKPiSwapped, isLcToPKPiSwapped, int8_t);
 // Events
 DECLARE_SOA_COLUMN(IsEventReject, isEventReject, int);
 DECLARE_SOA_COLUMN(RunNumber, runNumber, int);
@@ -150,7 +151,8 @@ DECLARE_SOA_TABLE(HfCandProng3Full, "AOD", "HFCANDP3Full",
                   full::Phi,
                   full::Y,
                   full::E,
-                  full::MCflag);
+                  full::MCflag,
+		  full::IsLcToPKPiSwapped);
 
 DECLARE_SOA_TABLE(HfCandProng3FullEvents, "AOD", "HFCANDP3FullE",
                   collision::BCId,
@@ -167,7 +169,8 @@ DECLARE_SOA_TABLE(HfCandProng3FullParticles, "AOD", "HFCANDP3FullP",
                   full::Eta,
                   full::Phi,
                   full::Y,
-                  full::MCflag);
+                  full::MCflag,
+		  full::IsLcToPKPiSwapped);
 
 } // namespace o2::aod
 
@@ -281,7 +284,8 @@ struct CandidateTreeWriter {
             candidate.phi(),
             FunctionY,
             FunctionE,
-            candidate.flagMCMatchRec());
+            candidate.flagMCMatchRec(),
+            candidate.isLcToPKPiSwapped());
         }
       };
 

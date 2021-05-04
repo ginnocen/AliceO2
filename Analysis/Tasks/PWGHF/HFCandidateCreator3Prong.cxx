@@ -160,6 +160,7 @@ struct HFCandidateCreator3ProngMC {
     int8_t flag = 0;
     int8_t origin = 0;
     int8_t channel = 0;
+    int8_t swapping = -1;
     std::vector<int> arrDaughIndex;
     std::array<int, 2> arrPDGDaugh;
     std::array<int, 2> arrPDGResonant1 = {kProton, 313};  // Λc± → p± K*
@@ -172,6 +173,8 @@ struct HFCandidateCreator3ProngMC {
       flag = 0;
       origin = 0;
       channel = 0;
+      swapping = -1;
+
       arrDaughIndex.clear();
       auto arrayDaughters = array{candidate.index0_as<aod::BigTracksMC>(), candidate.index1_as<aod::BigTracksMC>(), candidate.index2_as<aod::BigTracksMC>()};
 
@@ -189,7 +192,17 @@ struct HFCandidateCreator3ProngMC {
         if (indexRec > -1) {
           flag = sign * (1 << DecayType::LcToPKPi);
 
-          //Printf("Flagging the different Λc± → p± K∓ π± decay channels");
+	  auto daugh0 = arrayDaughters[0].mcParticle();
+	  auto daugh1 = arrayDaughters[1].mcParticle();
+	  auto daugh2 = arrayDaughters[2].mcParticle();
+	  std::cout<<"PDG Prong1: "<< std::abs(daugh0.pdgCode()) <<"  PDG Prong2: "<< std::abs(daugh1.pdgCode()) <<"  PDG Prong3: "<< std::abs(daugh2.pdgCode()) <<std::endl;
+	  //Printf("Flagging the different Λc± → p± K∓ π± decay channels");
+	  if (std::abs(daugh0.pdgCode()) == kProton) {
+	    swapping = 0;
+	  } else if (std::abs(daugh0.pdgCode()) == kPiPlus) {
+	    swapping = 1;
+	  }
+	  std::cout<<"PDG Prong1: "<< swapping <<std::endl;
           RecoDecay::getDaughters(particlesMC, particlesMC.iteratorAt(indexRec), &arrDaughIndex, array{0}, 1);
           if (arrDaughIndex.size() == 2) {
             for (auto iProng = 0; iProng < arrDaughIndex.size(); ++iProng) {
@@ -222,7 +235,7 @@ struct HFCandidateCreator3ProngMC {
         origin = (RecoDecay::getMother(particlesMC, particle, kBottom, true) > -1 ? OriginType::NonPrompt : OriginType::Prompt);
       }
 
-      rowMCMatchRec(flag, origin, channel);
+      rowMCMatchRec(flag, swapping, origin, channel);
     }
 
     // Match generated particles.

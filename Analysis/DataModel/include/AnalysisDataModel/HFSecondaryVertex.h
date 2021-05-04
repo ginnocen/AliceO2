@@ -376,6 +376,7 @@ DECLARE_SOA_DYNAMIC_COLUMN(MaxNormalisedDeltaIP, maxNormalisedDeltaIP, //!
                            [](float xVtxP, float yVtxP, float xVtxS, float yVtxS, float errDlxy, float pxM, float pyM, float ip0, float errIp0, float ip1, float errIp1, float ip2, float errIp2, float px0, float py0, float px1, float py1, float px2, float py2) -> float { return RecoDecay::maxNormalisedDeltaIP(array{xVtxP, yVtxP}, array{xVtxS, yVtxS}, errDlxy, array{pxM, pyM}, array{ip0, ip1, ip2}, array{errIp0, errIp1, errIp2}, array{array{px0, py0}, array{px1, py1}, array{px2, py2}}); });
 // MC matching result:
 DECLARE_SOA_COLUMN(FlagMCMatchRec, flagMCMatchRec, int8_t);         //! reconstruction level
+DECLARE_SOA_COLUMN(IsLcToPKPiSwapped, isLcToPKPiSwapped, int8_t);   //! swapping
 DECLARE_SOA_COLUMN(FlagMCMatchGen, flagMCMatchGen, int8_t);         //! generator level
 DECLARE_SOA_COLUMN(OriginMCRec, originMCRec, int8_t);               //! particle origin, reconstruction level
 DECLARE_SOA_COLUMN(OriginMCGen, originMCGen, int8_t);               //! particle origin, generator level
@@ -529,6 +530,7 @@ using HfCandProng3 = HfCandProng3Ext;
 // table with results of reconstruction level MC matching
 DECLARE_SOA_TABLE(HfCandProng3MCRec, "AOD", "HFCANDP3MCREC", //!
                   hf_cand_prong3::FlagMCMatchRec,
+		  hf_cand_prong3::IsLcToPKPiSwapped,
                   hf_cand_prong3::OriginMCRec,
                   hf_cand_prong3::FlagMCDecayChanRec);
 
