@@ -480,10 +480,37 @@ auto InvMassXicToPiKP(const T& candidate)
 {
   return InvMassLcpiKp(candidate);
 }
+
+// Ξcc±± → p± K∓ π± π±
+
+template <typename T>
+auto CtXicc(const T& candidate)
+{
+  return candidate.ct(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
+}
+
+template <typename T>
+auto YXicc(const T& candidate)
+{
+  return candidate.y(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
+}
+
+template <typename T>
+auto EXicc(const T& candidate)
+{
+  return candidate.e(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
+}
+
+template <typename T>
+auto InvMassXiccToXicPi(const T& candidate)
+{
+  return candidate.m(array{RecoDecay::getMassPDG(kXiCPlus), RecoDecay::getMassPDG(kPiPlus)});
+}
 } // namespace hf_cand_prong3
 
 // 3-prong decay candidate table
 DECLARE_SOA_TABLE(HfCandProng3Base, "AOD", "HFCANDP3BASE", //!
+                  o2::soa::Index<>,
                   // general columns
                   HFCAND_COLUMNS,
                   // 3-prong specific columns
