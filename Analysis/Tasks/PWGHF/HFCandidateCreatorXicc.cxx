@@ -19,6 +19,8 @@
 #include "AnalysisDataModel/HFSecondaryVertex.h"
 #include "AnalysisCore/trackUtilities.h"
 #include "ReconstructionDataFormats/DCA.h"
+#include "ReconstructionDataFormats/V0.h"
+#include "AnalysisDataModel/HFCandidateSelectionTables.h"
 
 using namespace o2;
 using namespace o2::framework;
@@ -38,7 +40,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 
 /// Reconstruction of xicc candidates
 struct HFCandidateCreatorXicc {
-  Produces<aod::HfCandProngXicc> rowCandidateBase;
+  //Produces<aod::HfCandProngXicc> rowCandidateBase;
 
   Configurable<double> magneticField{"d_bz", 5., "magnetic field"};
   Configurable<bool> b_propdca{"b_propdca", true, "create tracks version propagated to PCA"};
@@ -62,13 +64,11 @@ struct HFCandidateCreatorXicc {
   Filter filterSelectCandidates = (aod::hf_selcandidate_xic::isSelXicToPKPi >= d_selectionFlagXic || aod::hf_selcandidate_xic::isSelXicToPiKP >= d_selectionFlagXic);
 
   void process(aod::Collision const& collision,
-               soa::Filtered<soa::Join<
-                 aod::HfCandProng3,
-                 aod::HFSelXicToPKPiCandidate> const& xicCands,
+               soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelXicToPKPiCandidate>> const& xicCands,
                aod::BigTracks const& tracks)
   {
     // 3-prong vertex fitter to rebuild the Xic vertex
-    o2::vertexing::DCAFitterN<3> df;
+    o2::vertexing::DCAFitterN<3> df3;
     df3.setBz(magneticField);
     df3.setPropagateToPCA(b_propdca);
     df3.setMaxR(d_maxr);
@@ -78,7 +78,7 @@ struct HFCandidateCreatorXicc {
     df3.setUseAbsDCA(true);
 
     // 2-prong vertex fitter to build the Xicc vertex
-    o2::vertexing::DCAFitterN<2> df;
+    o2::vertexing::DCAFitterN<2> df2;
     df2.setBz(magneticField);
     df2.setPropagateToPCA(b_propdca);
     df2.setMaxR(d_maxr);
@@ -92,10 +92,10 @@ struct HFCandidateCreatorXicc {
         continue;
 
       if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
-        registry.fill(HIST("hmassXic"), InvMassXicToPKPi(xicCand), xicCand.pt());
+        hmassXic->Fill(InvMassXicToPKPi(xicCand), xicCand.pt());
       }
       if (xicCand.isSelXicToPiKP() >= d_selectionFlagXic) {
-        registry.fill(HIST("hmassXic"), InvMassXicToPiKP(xicCand), xicCand.pt());
+        hmassXic->Fill(InvMassXicToPiKP(xicCand), xicCand.pt());
       }
 
       auto track0 = xicCand.index0_as<aod::BigTracks>();
@@ -107,35 +107,31 @@ struct HFCandidateCreatorXicc {
       auto collision = track0.collision(); //FIXME: not sure we need it.
 
       // reconstruct the 3-prong secondary vertex
-      if (df.process(trackParVar0, trackParVar1, trackParVar2) == 0) {
+      if (df3.process(trackParVar0, trackParVar1, trackParVar2) == 0) {
         continue;
       }
-      const auto& secondaryVertex = df.getPCACandidate();
-      auto chi2PCA = df.getChi2AtPCACandidate();
-      auto covMatrixPCA = df.calcPCACovMatrix().Array();
-      trackParVar0 = df.getTrack(0);
-      trackParVar1 = df.getTrack(1);
-      trackParVar2 = df.getTrack(2);
+      const auto& secondaryVertex = df3.getPCACandidate();
+      trackParVar0.propagateTo(secondaryVertex[0], magneticField);
+      trackParVar1.propagateTo(secondaryVertex[0], magneticField);
+      trackParVar2.propagateTo(secondaryVertex[0], magneticField);
 
-      // get track momenta
-      array<float, 3> pvec0;
-      array<float, 3> pvec1;
-      array<float, 3> pvec2;
-      trackParVar0.getPxPyPzGlo(pvec0);
-      trackParVar1.getPxPyPzGlo(pvec1);
-      trackParVar2.getPxPyPzGlo(pvec2);
+      array<float, 3> pvecpK = {track0.px() + track1.px(), track0.py() + track1.py(), track0.pz() + track1.pz()};
+      array<float, 3> pvecxic = {pvecpK[0] + track2.px(), pvecpK[1] + track2.py(), pvecpK[2] + track2.pz()}; 
+      auto trackpK = o2::dataformats::V0(df3.getPCACandidatePos(), pvecpK, df3.calcPCACovMatrixFlat(), \
+                                         trackParVar0, trackParVar1, {0, 0}, {0, 0});
+      auto trackxic = o2::dataformats::V0(df3.getPCACandidatePos(), pvecxic, df3.calcPCACovMatrixFlat(), \
+                                          trackpK, trackParVar2, {0, 0}, {0, 0});
 
+      int index0Xic = track0.globalIndex();
+      int index1Xic = track1.globalIndex();
+      int index2Xic = track2.globalIndex();
+
+/*
       // get track impact parameters
       // This modifies track momenta!
       auto primaryVertex = getPrimaryVertex(collision);
       auto covMatrixPV = primaryVertex.getCov();
       hCovPVXX->Fill(covMatrixPV[0]);
-      o2::dataformats::DCA impactParameter0;
-      o2::dataformats::DCA impactParameter1;
-      o2::dataformats::DCA impactParameter2;
-      trackParVar0.propagateToDCA(primaryVertex, magneticField, &impactParameter0);
-      trackParVar1.propagateToDCA(primaryVertex, magneticField, &impactParameter1);
-      trackParVar2.propagateToDCA(primaryVertex, magneticField, &impactParameter2);
 
       const std::array<float, 3> vertexpK = {secondaryVertex.x, secondaryVertex.y, secondaryVertex.z};
       const std::array<float, 6> covpK = df2.calcPCACovMatrixFlat();
@@ -168,10 +164,11 @@ struct HFCandidateCreatorXicc {
         massPiKPi = RecoDecay::M(std::move(arrayMomenta), array{massPi, massK, massPi});
         hmass3->Fill(massPiKPi);
       }
+*/
     }
   }
 };
-
+/*
 /// Extends the base table with expression columns.
 struct HFCandidateCreator3ProngExpressions {
   Spawns<aod::HfCandProng3Ext> rowCandidateProng3;
@@ -311,16 +308,17 @@ struct HFCandidateCreator3ProngMC {
       rowMCMatchGen(flag, origin, channel);
     }
   }
+*/
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   WorkflowSpec workflow{
-    adaptAnalysisTask<HFCandidateCreator3Prong>(cfgc, TaskName{"hf-cand-creator-3prong"}),
-    adaptAnalysisTask<HFCandidateCreator3ProngExpressions>(cfgc, TaskName{"hf-cand-creator-3prong-expressions"})};
-  const bool doMC = cfgc.options().get<bool>("doMC");
-  if (doMC) {
-    workflow.push_back(adaptAnalysisTask<HFCandidateCreator3ProngMC>(cfgc, TaskName{"hf-cand-creator-3prong-mc"}));
-  }
+    adaptAnalysisTask<HFCandidateCreatorXicc>(cfgc, TaskName{"hf-cand-creator-xicc"})};
+    //adaptAnalysisTask<HFCandidateCreator3ProngExpressions>(cfgc, TaskName{"hf-cand-creator-3prong-expressions"})};
+  //const bool doMC = cfgc.options().get<bool>("doMC");
+  //if (doMC) {
+  //  workflow.push_back(adaptAnalysisTask<HFCandidateCreator3ProngMC>(cfgc, TaskName{"hf-cand-creator-3prong-mc"}));
+  //}
   return workflow;
 }

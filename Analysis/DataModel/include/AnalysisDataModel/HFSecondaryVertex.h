@@ -504,7 +504,7 @@ auto EXicc(const T& candidate)
 template <typename T>
 auto InvMassXiccToXicPi(const T& candidate)
 {
-  return candidate.m(array{RecoDecay::getMassPDG(kXiCPlus), RecoDecay::getMassPDG(kPiPlus)});
+  return candidate.m(array{RecoDecay::getMassPDG(pdg::Code::kXiCPlus), RecoDecay::getMassPDG(kPiPlus)});
 }
 } // namespace hf_cand_prong3
 
