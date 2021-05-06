@@ -66,7 +66,8 @@ struct HFCandidateCreatorXicc {
 
   void process(aod::Collision const& collision,
                soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelXicToPKPiCandidate>> const& xicCands,
-               aod::BigTracks const& tracks) {
+               aod::BigTracks const& tracks)
+  {
     // 3-prong vertex fitter to rebuild the Xic vertex
     o2::vertexing::DCAFitterN<3> df3;
     df3.setBz(magneticField);
@@ -91,95 +92,95 @@ struct HFCandidateCreatorXicc {
       if (!(xicCand.hfflag() & 1 << XicToPKPi)) {
         continue;
       }
-        if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
-          hmassXic->Fill(InvMassXicToPKPi(xicCand), xicCand.pt());
-        }
-        if (xicCand.isSelXicToPiKP() >= d_selectionFlagXic) {
-          hmassXic->Fill(InvMassXicToPiKP(xicCand), xicCand.pt());
-        }
-        auto track0 = xicCand.index0_as<aod::BigTracks>();
-        auto track1 = xicCand.index1_as<aod::BigTracks>();
-        auto track2 = xicCand.index2_as<aod::BigTracks>();
-        auto trackParVar0 = getTrackParCov(track0);
-        auto trackParVar1 = getTrackParCov(track1);
-        auto trackParVar2 = getTrackParCov(track2);
-        auto collision = track0.collision(); //FIXME: not sure we need it.
+      if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
+        hmassXic->Fill(InvMassXicToPKPi(xicCand), xicCand.pt());
+      }
+      if (xicCand.isSelXicToPiKP() >= d_selectionFlagXic) {
+        hmassXic->Fill(InvMassXicToPiKP(xicCand), xicCand.pt());
+      }
+      auto track0 = xicCand.index0_as<aod::BigTracks>();
+      auto track1 = xicCand.index1_as<aod::BigTracks>();
+      auto track2 = xicCand.index2_as<aod::BigTracks>();
+      auto trackParVar0 = getTrackParCov(track0);
+      auto trackParVar1 = getTrackParCov(track1);
+      auto trackParVar2 = getTrackParCov(track2);
+      auto collision = track0.collision(); //FIXME: not sure we need it.
 
-        // reconstruct the 3-prong secondary vertex
-        if (df3.process(trackParVar0, trackParVar1, trackParVar2) == 0) {
+      // reconstruct the 3-prong secondary vertex
+      if (df3.process(trackParVar0, trackParVar1, trackParVar2) == 0) {
+        continue;
+      }
+      const auto& secondaryVertex = df3.getPCACandidate();
+      trackParVar0.propagateTo(secondaryVertex[0], magneticField);
+      trackParVar1.propagateTo(secondaryVertex[0], magneticField);
+      trackParVar2.propagateTo(secondaryVertex[0], magneticField);
+
+      array<float, 3> pvecpK = {track0.px() + track1.px(), track0.py() + track1.py(), track0.pz() + track1.pz()};
+      array<float, 3> pvecxic = {pvecpK[0] + track2.px(), pvecpK[1] + track2.py(), pvecpK[2] + track2.pz()};
+      auto trackpK = o2::dataformats::V0(df3.getPCACandidatePos(), pvecpK, df3.calcPCACovMatrixFlat(),
+                                         trackParVar0, trackParVar1, {0, 0}, {0, 0});
+      auto trackxic = o2::dataformats::V0(df3.getPCACandidatePos(), pvecxic, df3.calcPCACovMatrixFlat(),
+                                          trackpK, trackParVar2, {0, 0}, {0, 0});
+
+      int index0Xic = track0.globalIndex();
+      int index1Xic = track1.globalIndex();
+      int index2Xic = track2.globalIndex();
+      int charge = track0.sign() + track1.sign() + track2.sign();
+
+      for (auto& trackpion : tracks) {
+        if (trackpion.sign() * charge < 0) {
           continue;
         }
-        const auto& secondaryVertex = df3.getPCACandidate();
-        trackParVar0.propagateTo(secondaryVertex[0], magneticField);
-        trackParVar1.propagateTo(secondaryVertex[0], magneticField);
-        trackParVar2.propagateTo(secondaryVertex[0], magneticField);
+        if (trackpion.globalIndex() == index0Xic || trackpion.globalIndex() == index1Xic || trackpion.globalIndex() == index2Xic) {
+          continue;
+        }
+        array<float, 3> pvecpion;
+        auto trackParVarPi = getTrackParCov(trackpion);
 
-        array<float, 3> pvecpK = {track0.px() + track1.px(), track0.py() + track1.py(), track0.pz() + track1.pz()};
-        array<float, 3> pvecxic = {pvecpK[0] + track2.px(), pvecpK[1] + track2.py(), pvecpK[2] + track2.pz()};
-        auto trackpK = o2::dataformats::V0(df3.getPCACandidatePos(), pvecpK, df3.calcPCACovMatrixFlat(),
-                                           trackParVar0, trackParVar1, {0, 0}, {0, 0});
-        auto trackxic = o2::dataformats::V0(df3.getPCACandidatePos(), pvecxic, df3.calcPCACovMatrixFlat(),
-                                            trackpK, trackParVar2, {0, 0}, {0, 0});
+        // reconstruct the 3-prong X vertex
+        if (df2.process(trackxic, trackParVarPi) == 0) {
+          continue;
+        }
 
-        int index0Xic = track0.globalIndex();
-        int index1Xic = track1.globalIndex();
-        int index2Xic = track2.globalIndex();
-        int charge = track0.sign() + track1.sign() + track2.sign();
+        // calculate relevant properties
+        const auto& secondaryVertexXicc = df2.getPCACandidate();
+        auto chi2PCA = df2.getChi2AtPCACandidate();
+        auto covMatrixPCA = df2.calcPCACovMatrix().Array();
 
-	for (auto& trackpion : tracks) {
-          if (trackpion.sign() * charge < 0) {
-            continue;
-          }
-          if (trackpion.globalIndex() == index0Xic || trackpion.globalIndex() == index1Xic || trackpion.globalIndex() == index2Xic) {
-            continue;
-          }
-          array<float, 3> pvecpion;
-	  auto trackParVarPi = getTrackParCov(trackpion);
- 
-	  // reconstruct the 3-prong X vertex
-          if (df2.process(trackxic, trackParVarPi) == 0) {
-            continue;
-          }
+        df2.propagateTracksToVertex();
+        df2.getTrack(0).getPxPyPzGlo(pvecxic);
+        df2.getTrack(1).getPxPyPzGlo(pvecpion);
 
-          // calculate relevant properties
-          const auto& secondaryVertexXicc = df2.getPCACandidate();
-          auto chi2PCA = df2.getChi2AtPCACandidate();
-          auto covMatrixPCA = df2.calcPCACovMatrix().Array();
-          
-          df2.propagateTracksToVertex();
-          df2.getTrack(0).getPxPyPzGlo(pvecxic); 
-          df2.getTrack(1).getPxPyPzGlo(pvecpion); 
+        auto primaryVertex = getPrimaryVertex(collision);
+        auto covMatrixPV = primaryVertex.getCov();
+        o2::dataformats::DCA impactParameter0;
+        o2::dataformats::DCA impactParameter1;
+        trackxic.propagateToDCA(primaryVertex, magneticField, &impactParameter0);
+        trackParVarPi.propagateToDCA(primaryVertex, magneticField, &impactParameter1);
 
-	  auto primaryVertex = getPrimaryVertex(collision);
-          auto covMatrixPV = primaryVertex.getCov();
-          o2::dataformats::DCA impactParameter0;
-          o2::dataformats::DCA impactParameter1;
-          trackxic.propagateToDCA(primaryVertex, magneticField, &impactParameter0);
-          trackParVarPi.propagateToDCA(primaryVertex, magneticField, &impactParameter1);
+        // get uncertainty of the decay length
+        double phi, theta;
+        getPointDirection(array{collision.posX(), collision.posY(), collision.posZ()}, secondaryVertexXicc, phi, theta);
+        auto errorDecayLength = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, theta) + getRotatedCovMatrixXX(covMatrixPCA, phi, theta));
+        auto errorDecayLengthXY = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, 0.) + getRotatedCovMatrixXX(covMatrixPCA, phi, 0.));
 
-	  // get uncertainty of the decay length
-          double phi, theta;
-          getPointDirection(array{collision.posX(), collision.posY(), collision.posZ()}, secondaryVertexXicc, phi, theta);
-          auto errorDecayLength = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, theta) + getRotatedCovMatrixXX(covMatrixPCA, phi, theta));
-          auto errorDecayLengthXY = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, 0.) + getRotatedCovMatrixXX(covMatrixPCA, phi, 0.));
+        int hfFlag = 1 << XiccToXicPi;
 
-          int hfFlag = 1 << XiccToXicPi;
-
-          rowCandidateBase(collision.globalIndex(),
-                           collision.posX(), collision.posY(), collision.posZ(),
-                           secondaryVertexXicc[0], secondaryVertexXicc[1], secondaryVertexXicc[2],
-                           errorDecayLength, errorDecayLengthXY,
-                           chi2PCA,
-                           pvecxic[0], pvecxic[1], pvecxic[2],
-                           pvecpion[0], pvecpion[1], pvecpion[2],
-                           impactParameter0.getY(), impactParameter1.getY(),
-                           std::sqrt(impactParameter0.getSigmaY2()), std::sqrt(impactParameter1.getSigmaY2()), 
-                           xicCand.globalIndex(), trackpion.globalIndex(),
-                           hfFlag);
-          // calculate invariant mass
-          auto arrayMomenta = array{pvecxic, pvecpion};
-          massXicc = RecoDecay::M(std::move(arrayMomenta), array{massXic, massPi});
-          hmassXicc->Fill(massXicc);
+        rowCandidateBase(collision.globalIndex(),
+                         collision.posX(), collision.posY(), collision.posZ(),
+                         secondaryVertexXicc[0], secondaryVertexXicc[1], secondaryVertexXicc[2],
+                         errorDecayLength, errorDecayLengthXY,
+                         chi2PCA,
+                         pvecxic[0], pvecxic[1], pvecxic[2],
+                         pvecpion[0], pvecpion[1], pvecpion[2],
+                         impactParameter0.getY(), impactParameter1.getY(),
+                         std::sqrt(impactParameter0.getSigmaY2()), std::sqrt(impactParameter1.getSigmaY2()),
+                         xicCand.globalIndex(), trackpion.globalIndex(),
+                         hfFlag);
+        // calculate invariant mass
+        auto arrayMomenta = array{pvecxic, pvecpion};
+        massXicc = RecoDecay::M(std::move(arrayMomenta), array{massXic, massPi});
+        hmassXicc->Fill(massXicc);
       } // if on selected Xicc
     }   // loop over candidates
   }     // end of process
