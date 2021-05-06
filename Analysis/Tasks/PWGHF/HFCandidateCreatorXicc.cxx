@@ -40,7 +40,7 @@ void customize(std::vector<o2::framework::ConfigParamSpec>& workflowOptions)
 
 /// Reconstruction of xicc candidates
 struct HFCandidateCreatorXicc {
-  //Produces<aod::HfCandProngXicc> rowCandidateBase;
+  Produces<aod::HfCandXiccBase> rowCandidateBase;
 
   Configurable<double> magneticField{"d_bz", 5., "magnetic field"};
   Configurable<bool> b_propdca{"b_propdca", true, "create tracks version propagated to PCA"};
@@ -97,7 +97,6 @@ struct HFCandidateCreatorXicc {
       if (xicCand.isSelXicToPiKP() >= d_selectionFlagXic) {
         hmassXic->Fill(InvMassXicToPiKP(xicCand), xicCand.pt());
       }
-
       auto track0 = xicCand.index0_as<aod::BigTracks>();
       auto track1 = xicCand.index1_as<aod::BigTracks>();
       auto track2 = xicCand.index2_as<aod::BigTracks>();
@@ -125,62 +124,42 @@ struct HFCandidateCreatorXicc {
       int index0Xic = track0.globalIndex();
       int index1Xic = track1.globalIndex();
       int index2Xic = track2.globalIndex();
+      LOGF(info, "ERERERERERE");
+      for (auto& trackPos : tracks) {
+         if (trackPos.sign() < 0) { // select only positive tracks - use partitions?
+           continue;
+         }
 
-/*
-      // get track impact parameters
-      // This modifies track momenta!
-      auto primaryVertex = getPrimaryVertex(collision);
-      auto covMatrixPV = primaryVertex.getCov();
-      hCovPVXX->Fill(covMatrixPV[0]);
+         rowCandidateBase(collision.globalIndex(),
+                          collision.posX(), collision.posY(), collision.posZ(),
+                          secondaryVertex[0], secondaryVertex[1], secondaryVertex[2],
+                          0., 0.,
+                          0.,
+                          1., 0., 0.,
+                          0., 0., 0.,
+                          0., 0.,
+                          0., 0.,
+                          0, 0,
+                          1);
+       
+        }
+      } // if on selected Xicc
+    } // loop over candidates
+  } // end of process
+}; //end of struct
 
-      const std::array<float, 3> vertexpK = {secondaryVertex.x, secondaryVertex.y, secondaryVertex.z};
-      const std::array<float, 6> covpK = df2.calcPCACovMatrixFlat();
-      array<float, 3> pvecpK = {jpsiCand.px(), jpsiCand.py(), jpsiCand.pz()};
-
-      // get uncertainty of the decay length
-      double phi, theta;
-      getPointDirection(array{collision.posX(), collision.posY(), collision.posZ()}, secondaryVertex, phi, theta);
-      auto errorDecayLength = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, theta) + getRotatedCovMatrixXX(covMatrixPCA, phi, theta));
-      auto errorDecayLengthXY = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, 0.) + getRotatedCovMatrixXX(covMatrixPCA, phi, 0.));
-
-      // fill candidate table rows
-      rowCandidateBase(collision.globalIndex(),
-                       collision.posX(), collision.posY(), collision.posZ(),
-                       secondaryVertex[0], secondaryVertex[1], secondaryVertex[2],
-                       errorDecayLength, errorDecayLengthXY,
-                       chi2PCA,
-                       pvec0[0], pvec0[1], pvec0[2],
-                       pvec1[0], pvec1[1], pvec1[2],
-                       pvec2[0], pvec2[1], pvec2[2],
-                       impactParameter0.getY(), impactParameter1.getY(), impactParameter2.getY(),
-                       std::sqrt(impactParameter0.getSigmaY2()), std::sqrt(impactParameter1.getSigmaY2()), std::sqrt(impactParameter2.getSigmaY2()),
-                       rowTrackIndexProng3.index0Id(), rowTrackIndexProng3.index1Id(), rowTrackIndexProng3.index2Id(),
-                       rowTrackIndexProng3.hfflag());
-
-      // fill histograms
-      if (b_dovalplots) {
-        // calculate invariant mass
-        auto arrayMomenta = array{pvec0, pvec1, pvec2};
-        massPiKPi = RecoDecay::M(std::move(arrayMomenta), array{massPi, massK, massPi});
-        hmass3->Fill(massPiKPi);
-      }
-*/
-    }
-  }
-};
-/*
 /// Extends the base table with expression columns.
-struct HFCandidateCreator3ProngExpressions {
-  Spawns<aod::HfCandProng3Ext> rowCandidateProng3;
+struct HFCandidateCreatorXiccExpressions {
+  Spawns<aod::HfCandXiccExt> rowCandidateXicc;
   void init(InitContext const&) {}
 };
 
 /// Performs MC matching.
-struct HFCandidateCreator3ProngMC {
-  Produces<aod::HfCandProng3MCRec> rowMCMatchRec;
-  Produces<aod::HfCandProng3MCGen> rowMCMatchGen;
+struct HFCandidateCreatorXiccMC {
+  Produces<aod::HfCandXiccMCRec> rowMCMatchRec;
+  Produces<aod::HfCandXiccMCGen> rowMCMatchGen;
 
-  void process(aod::HfCandProng3 const& candidates,
+  void process(aod::HfCandXicc const& candidates,
                aod::BigTracksMC const& tracks,
                aod::McParticles const& particlesMC)
   {
@@ -189,136 +168,35 @@ struct HFCandidateCreator3ProngMC {
     int8_t flag = 0;
     int8_t origin = 0;
     int8_t channel = 0;
-    std::vector<int> arrDaughIndex;
-    std::array<int, 2> arrPDGDaugh;
-    std::array<int, 2> arrPDGResonant1 = {kProton, 313};  // Λc± → p± K*
-    std::array<int, 2> arrPDGResonant2 = {2224, kKPlus};  // Λc± → Δ(1232)±± K∓
-    std::array<int, 2> arrPDGResonant3 = {3124, kPiPlus}; // Λc± → Λ(1520) π±
 
     // Match reconstructed candidates.
     for (auto& candidate : candidates) {
       //Printf("New rec. candidate");
-      flag = 0;
+      flag = 1;
       origin = 0;
       channel = 0;
-      arrDaughIndex.clear();
-      auto arrayDaughters = array{candidate.index0_as<aod::BigTracksMC>(), candidate.index1_as<aod::BigTracksMC>(), candidate.index2_as<aod::BigTracksMC>()};
-
-      // D± → π± K∓ π±
-      //Printf("Checking D± → π± K∓ π±");
-      indexRec = RecoDecay::getMatchedMCRec(particlesMC, arrayDaughters, pdg::Code::kDPlus, array{+kPiPlus, -kKPlus, +kPiPlus}, true, &sign);
-      if (indexRec > -1) {
-        flag = sign * (1 << DecayType::DPlusToPiKPi);
-      }
-
-      // Λc± → p± K∓ π±
-      if (flag == 0) {
-        //Printf("Checking Λc± → p± K∓ π±");
-        indexRec = RecoDecay::getMatchedMCRec(particlesMC, arrayDaughters, pdg::Code::kLambdaCPlus, array{+kProton, -kKPlus, +kPiPlus}, true, &sign, 2);
-        if (indexRec > -1) {
-          flag = sign * (1 << DecayType::LcToPKPi);
-
-          //Printf("Flagging the different Λc± → p± K∓ π± decay channels");
-          RecoDecay::getDaughters(particlesMC, particlesMC.iteratorAt(indexRec), &arrDaughIndex, array{0}, 1);
-          if (arrDaughIndex.size() == 2) {
-            for (auto iProng = 0; iProng < arrDaughIndex.size(); ++iProng) {
-              auto daughI = particlesMC.iteratorAt(arrDaughIndex[iProng]);
-              arrPDGDaugh[iProng] = std::abs(daughI.pdgCode());
-            }
-            if (arrPDGDaugh[0] == arrPDGResonant1[0] && arrPDGDaugh[1] == arrPDGResonant1[1]) {
-              channel = 1;
-            } else if (arrPDGDaugh[0] == arrPDGResonant2[0] && arrPDGDaugh[1] == arrPDGResonant2[1]) {
-              channel = 2;
-            } else if (arrPDGDaugh[0] == arrPDGResonant3[0] && arrPDGDaugh[1] == arrPDGResonant3[1]) {
-              channel = 3;
-            }
-          }
-        }
-      }
-
-      // Ξc± → p± K∓ π±
-      if (flag == 0) {
-        //Printf("Checking Ξc± → p± K∓ π±");
-        indexRec = RecoDecay::getMatchedMCRec(particlesMC, std::move(arrayDaughters), pdg::Code::kXiCPlus, array{+kProton, -kKPlus, +kPiPlus}, true, &sign);
-        if (indexRec > -1) {
-          flag = sign * (1 << DecayType::XicToPKPi);
-        }
-      }
-
-      // Check whether the particle is non-prompt (from a b quark).
-      if (flag != 0) {
-        auto particle = particlesMC.iteratorAt(indexRec);
-        origin = (RecoDecay::getMother(particlesMC, particle, kBottom, true) > -1 ? OriginType::NonPrompt : OriginType::Prompt);
-      }
-
       rowMCMatchRec(flag, origin, channel);
     }
 
     // Match generated particles.
     for (auto& particle : particlesMC) {
       //Printf("New gen. candidate");
-      flag = 0;
+      flag = 1;
       origin = 0;
       channel = 0;
-      arrDaughIndex.clear();
-
-      // D± → π± K∓ π±
-      //Printf("Checking D± → π± K∓ π±");
-      if (RecoDecay::isMatchedMCGen(particlesMC, particle, pdg::Code::kDPlus, array{+kPiPlus, -kKPlus, +kPiPlus}, true, &sign)) {
-        flag = sign * (1 << DecayType::DPlusToPiKPi);
-      }
-
-      // Λc± → p± K∓ π±
-      if (flag == 0) {
-        //Printf("Checking Λc± → p± K∓ π±");
-        if (RecoDecay::isMatchedMCGen(particlesMC, particle, pdg::Code::kLambdaCPlus, array{+kProton, -kKPlus, +kPiPlus}, true, &sign, 2)) {
-          flag = sign * (1 << DecayType::LcToPKPi);
-
-          //Printf("Flagging the different Λc± → p± K∓ π± decay channels");
-          RecoDecay::getDaughters(particlesMC, particle, &arrDaughIndex, array{0}, 1);
-          if (arrDaughIndex.size() == 2) {
-            for (auto jProng = 0; jProng < arrDaughIndex.size(); ++jProng) {
-              auto daughJ = particlesMC.iteratorAt(arrDaughIndex[jProng]);
-              arrPDGDaugh[jProng] = std::abs(daughJ.pdgCode());
-            }
-            if (arrPDGDaugh[0] == arrPDGResonant1[0] && arrPDGDaugh[1] == arrPDGResonant1[1]) {
-              channel = 1;
-            } else if (arrPDGDaugh[0] == arrPDGResonant2[0] && arrPDGDaugh[1] == arrPDGResonant2[1]) {
-              channel = 2;
-            } else if (arrPDGDaugh[0] == arrPDGResonant3[0] && arrPDGDaugh[1] == arrPDGResonant3[1]) {
-              channel = 3;
-            }
-          }
-        }
-      }
-
-      // Ξc± → p± K∓ π±
-      if (flag == 0) {
-        //Printf("Checking Ξc± → p± K∓ π±");
-        if (RecoDecay::isMatchedMCGen(particlesMC, particle, pdg::Code::kXiCPlus, array{+kProton, -kKPlus, +kPiPlus}, true, &sign)) {
-          flag = sign * (1 << DecayType::XicToPKPi);
-        }
-      }
-
-      // Check whether the particle is non-prompt (from a b quark).
-      if (flag != 0) {
-        origin = (RecoDecay::getMother(particlesMC, particle, kBottom, true) > -1 ? OriginType::NonPrompt : OriginType::Prompt);
-      }
-
       rowMCMatchGen(flag, origin, channel);
     }
   }
-*/
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   WorkflowSpec workflow{
-    adaptAnalysisTask<HFCandidateCreatorXicc>(cfgc, TaskName{"hf-cand-creator-xicc"})};
-    //adaptAnalysisTask<HFCandidateCreator3ProngExpressions>(cfgc, TaskName{"hf-cand-creator-3prong-expressions"})};
-  //const bool doMC = cfgc.options().get<bool>("doMC");
-  //if (doMC) {
-  //  workflow.push_back(adaptAnalysisTask<HFCandidateCreator3ProngMC>(cfgc, TaskName{"hf-cand-creator-3prong-mc"}));
-  //}
+    adaptAnalysisTask<HFCandidateCreatorXicc>(cfgc, TaskName{"hf-cand-creator-xicc"}),
+    adaptAnalysisTask<HFCandidateCreatorXiccExpressions>(cfgc, TaskName{"hf-cand-creator-xicc-expressions"})};
+    const bool doMC = cfgc.options().get<bool>("doMC");
+    if (doMC) {
+     workflow.push_back(adaptAnalysisTask<HFCandidateCreatorXiccMC>(cfgc, TaskName{"hf-cand-creator-xicc-mc"}));
+    }
   return workflow;
 }
