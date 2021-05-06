@@ -53,11 +53,12 @@ struct HFCandidateCreatorXicc {
   OutputObj<TH1F> hmassXic{TH1F("hmassXic", "xic candidates;inv. mass (#pi K #pi) (GeV/#it{c}^{2});entries", 500, 1.6, 2.6)};
   OutputObj<TH1F> hCovPVXX{TH1F("hCovPVXX", "3-prong candidates;XX element of cov. matrix of prim. vtx position (cm^{2});entries", 100, 0., 1.e-4)};
   OutputObj<TH1F> hCovSVXX{TH1F("hCovSVXX", "3-prong candidates;XX element of cov. matrix of sec. vtx position (cm^{2});entries", 100, 0., 0.2)};
-  OutputObj<TH1F> hmassXicc{TH1F("hmassXicc", "xicc candidates;inv. mass (#Xi_{c} #pi) (GeV/#it{c}^{2});entries", 400, 2.5, 4.5)};
+  OutputObj<TH1F> hmassXicc{TH1F("hmassXicc", "xicc candidates;inv. mass (#Xi_{cc} #pi) (GeV/#it{c}^{2});entries", 400, 2.5, 6.5)};
 
   double massPi = RecoDecay::getMassPDG(kPiPlus);
   double massK = RecoDecay::getMassPDG(kKPlus);
-  double massPiKPi{0.};
+  double massXic = RecoDecay::getMassPDG(4232);
+  double massXicc{0.};
 
   Configurable<int> d_selectionFlagXic{"d_selectionFlagXic", 1, "Selection Flag for Xic"};
   Configurable<double> cutYCandMax{"cutYCandMax", -1., "max. cand. rapidity"};
@@ -65,8 +66,7 @@ struct HFCandidateCreatorXicc {
 
   void process(aod::Collision const& collision,
                soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelXicToPKPiCandidate>> const& xicCands,
-               aod::BigTracks const& tracks)
-  {
+               aod::BigTracks const& tracks) {
     // 3-prong vertex fitter to rebuild the Xic vertex
     o2::vertexing::DCAFitterN<3> df3;
     df3.setBz(magneticField);
@@ -90,7 +90,7 @@ struct HFCandidateCreatorXicc {
     for (auto& xicCand : xicCands) {
       if (!(xicCand.hfflag() & 1 << XicToPKPi)) {
         continue;
-
+      }
         if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
           hmassXic->Fill(InvMassXicToPKPi(xicCand), xicCand.pt());
         }
@@ -124,23 +124,62 @@ struct HFCandidateCreatorXicc {
         int index0Xic = track0.globalIndex();
         int index1Xic = track1.globalIndex();
         int index2Xic = track2.globalIndex();
-        for (auto& trackPos : tracks) {
-          if (trackPos.sign() < 0) { // select only positive tracks - use partitions?
+        int charge = track0.sign() + track1.sign() + track2.sign();
+
+	for (auto& trackpion : tracks) {
+          if (trackpion.sign() * charge < 0) {
+            continue;
+          }
+          if (trackpion.globalIndex() == index0Xic || trackpion.globalIndex() == index1Xic || trackpion.globalIndex() == index2Xic) {
+            continue;
+          }
+          array<float, 3> pvecpion;
+	  auto trackParVarPi = getTrackParCov(trackpion);
+ 
+	  // reconstruct the 3-prong X vertex
+          if (df2.process(trackxic, trackParVarPi) == 0) {
             continue;
           }
 
+          // calculate relevant properties
+          const auto& secondaryVertexXicc = df2.getPCACandidate();
+          auto chi2PCA = df2.getChi2AtPCACandidate();
+          auto covMatrixPCA = df2.calcPCACovMatrix().Array();
+          
+          df2.propagateTracksToVertex();
+          df2.getTrack(0).getPxPyPzGlo(pvecxic); 
+          df2.getTrack(1).getPxPyPzGlo(pvecpion); 
+
+	  auto primaryVertex = getPrimaryVertex(collision);
+          auto covMatrixPV = primaryVertex.getCov();
+          o2::dataformats::DCA impactParameter0;
+          o2::dataformats::DCA impactParameter1;
+          trackxic.propagateToDCA(primaryVertex, magneticField, &impactParameter0);
+          trackParVarPi.propagateToDCA(primaryVertex, magneticField, &impactParameter1);
+
+	  // get uncertainty of the decay length
+          double phi, theta;
+          getPointDirection(array{collision.posX(), collision.posY(), collision.posZ()}, secondaryVertexXicc, phi, theta);
+          auto errorDecayLength = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, theta) + getRotatedCovMatrixXX(covMatrixPCA, phi, theta));
+          auto errorDecayLengthXY = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, 0.) + getRotatedCovMatrixXX(covMatrixPCA, phi, 0.));
+
+          int hfFlag = 1 << XiccToXicPi;
+
           rowCandidateBase(collision.globalIndex(),
                            collision.posX(), collision.posY(), collision.posZ(),
-                           secondaryVertex[0], secondaryVertex[1], secondaryVertex[2],
-                           0., 0.,
-                           0.,
-                           1., 0., 0.,
-                           0., 0., 0.,
-                           0., 0.,
-                           0., 0.,
-                           0, 0,
-                           1);
-        }
+                           secondaryVertexXicc[0], secondaryVertexXicc[1], secondaryVertexXicc[2],
+                           errorDecayLength, errorDecayLengthXY,
+                           chi2PCA,
+                           pvecxic[0], pvecxic[1], pvecxic[2],
+                           pvecpion[0], pvecpion[1], pvecpion[2],
+                           impactParameter0.getY(), impactParameter1.getY(),
+                           std::sqrt(impactParameter0.getSigmaY2()), std::sqrt(impactParameter1.getSigmaY2()), 
+                           xicCand.globalIndex(), trackpion.globalIndex(),
+                           hfFlag);
+          // calculate invariant mass
+          auto arrayMomenta = array{pvecxic, pvecpion};
+          massXicc = RecoDecay::M(std::move(arrayMomenta), array{massXic, massPi});
+          hmassXicc->Fill(massXicc);
       } // if on selected Xicc
     }   // loop over candidates
   }     // end of process
