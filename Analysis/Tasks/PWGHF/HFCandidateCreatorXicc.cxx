@@ -91,62 +91,61 @@ struct HFCandidateCreatorXicc {
       if (!(xicCand.hfflag() & 1 << XicToPKPi)) {
         continue;
 
-      if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
-        hmassXic->Fill(InvMassXicToPKPi(xicCand), xicCand.pt());
-      }
-      if (xicCand.isSelXicToPiKP() >= d_selectionFlagXic) {
-        hmassXic->Fill(InvMassXicToPiKP(xicCand), xicCand.pt());
-      }
-      auto track0 = xicCand.index0_as<aod::BigTracks>();
-      auto track1 = xicCand.index1_as<aod::BigTracks>();
-      auto track2 = xicCand.index2_as<aod::BigTracks>();
-      auto trackParVar0 = getTrackParCov(track0);
-      auto trackParVar1 = getTrackParCov(track1);
-      auto trackParVar2 = getTrackParCov(track2);
-      auto collision = track0.collision(); //FIXME: not sure we need it.
+        if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
+          hmassXic->Fill(InvMassXicToPKPi(xicCand), xicCand.pt());
+        }
+        if (xicCand.isSelXicToPiKP() >= d_selectionFlagXic) {
+          hmassXic->Fill(InvMassXicToPiKP(xicCand), xicCand.pt());
+        }
+        auto track0 = xicCand.index0_as<aod::BigTracks>();
+        auto track1 = xicCand.index1_as<aod::BigTracks>();
+        auto track2 = xicCand.index2_as<aod::BigTracks>();
+        auto trackParVar0 = getTrackParCov(track0);
+        auto trackParVar1 = getTrackParCov(track1);
+        auto trackParVar2 = getTrackParCov(track2);
+        auto collision = track0.collision(); //FIXME: not sure we need it.
 
-      // reconstruct the 3-prong secondary vertex
-      if (df3.process(trackParVar0, trackParVar1, trackParVar2) == 0) {
-        continue;
-      }
-      const auto& secondaryVertex = df3.getPCACandidate();
-      trackParVar0.propagateTo(secondaryVertex[0], magneticField);
-      trackParVar1.propagateTo(secondaryVertex[0], magneticField);
-      trackParVar2.propagateTo(secondaryVertex[0], magneticField);
+        // reconstruct the 3-prong secondary vertex
+        if (df3.process(trackParVar0, trackParVar1, trackParVar2) == 0) {
+          continue;
+        }
+        const auto& secondaryVertex = df3.getPCACandidate();
+        trackParVar0.propagateTo(secondaryVertex[0], magneticField);
+        trackParVar1.propagateTo(secondaryVertex[0], magneticField);
+        trackParVar2.propagateTo(secondaryVertex[0], magneticField);
 
-      array<float, 3> pvecpK = {track0.px() + track1.px(), track0.py() + track1.py(), track0.pz() + track1.pz()};
-      array<float, 3> pvecxic = {pvecpK[0] + track2.px(), pvecpK[1] + track2.py(), pvecpK[2] + track2.pz()}; 
-      auto trackpK = o2::dataformats::V0(df3.getPCACandidatePos(), pvecpK, df3.calcPCACovMatrixFlat(), \
-                                         trackParVar0, trackParVar1, {0, 0}, {0, 0});
-      auto trackxic = o2::dataformats::V0(df3.getPCACandidatePos(), pvecxic, df3.calcPCACovMatrixFlat(), \
-                                          trackpK, trackParVar2, {0, 0}, {0, 0});
+        array<float, 3> pvecpK = {track0.px() + track1.px(), track0.py() + track1.py(), track0.pz() + track1.pz()};
+        array<float, 3> pvecxic = {pvecpK[0] + track2.px(), pvecpK[1] + track2.py(), pvecpK[2] + track2.pz()};
+        auto trackpK = o2::dataformats::V0(df3.getPCACandidatePos(), pvecpK, df3.calcPCACovMatrixFlat(),
+                                           trackParVar0, trackParVar1, {0, 0}, {0, 0});
+        auto trackxic = o2::dataformats::V0(df3.getPCACandidatePos(), pvecxic, df3.calcPCACovMatrixFlat(),
+                                            trackpK, trackParVar2, {0, 0}, {0, 0});
 
-      int index0Xic = track0.globalIndex();
-      int index1Xic = track1.globalIndex();
-      int index2Xic = track2.globalIndex();
-      LOGF(info, "ERERERERERE");
-      for (auto& trackPos : tracks) {
-         if (trackPos.sign() < 0) { // select only positive tracks - use partitions?
-           continue;
-         }
+        int index0Xic = track0.globalIndex();
+        int index1Xic = track1.globalIndex();
+        int index2Xic = track2.globalIndex();
+        LOGF(info, "ERERERERERE");
+        for (auto& trackPos : tracks) {
+          if (trackPos.sign() < 0) { // select only positive tracks - use partitions?
+            continue;
+          }
 
-         rowCandidateBase(collision.globalIndex(),
-                          collision.posX(), collision.posY(), collision.posZ(),
-                          secondaryVertex[0], secondaryVertex[1], secondaryVertex[2],
-                          0., 0.,
-                          0.,
-                          1., 0., 0.,
-                          0., 0., 0.,
-                          0., 0.,
-                          0., 0.,
-                          0, 0,
-                          1);
-       
+          rowCandidateBase(collision.globalIndex(),
+                           collision.posX(), collision.posY(), collision.posZ(),
+                           secondaryVertex[0], secondaryVertex[1], secondaryVertex[2],
+                           0., 0.,
+                           0.,
+                           1., 0., 0.,
+                           0., 0., 0.,
+                           0., 0.,
+                           0., 0.,
+                           0, 0,
+                           1);
         }
       } // if on selected Xicc
-    } // loop over candidates
-  } // end of process
-}; //end of struct
+    }   // loop over candidates
+  }     // end of process
+};      //end of struct
 
 /// Extends the base table with expression columns.
 struct HFCandidateCreatorXiccExpressions {
@@ -194,9 +193,9 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
   WorkflowSpec workflow{
     adaptAnalysisTask<HFCandidateCreatorXicc>(cfgc, TaskName{"hf-cand-creator-xicc"}),
     adaptAnalysisTask<HFCandidateCreatorXiccExpressions>(cfgc, TaskName{"hf-cand-creator-xicc-expressions"})};
-    const bool doMC = cfgc.options().get<bool>("doMC");
-    if (doMC) {
-     workflow.push_back(adaptAnalysisTask<HFCandidateCreatorXiccMC>(cfgc, TaskName{"hf-cand-creator-xicc-mc"}));
-    }
+  const bool doMC = cfgc.options().get<bool>("doMC");
+  if (doMC) {
+    workflow.push_back(adaptAnalysisTask<HFCandidateCreatorXiccMC>(cfgc, TaskName{"hf-cand-creator-xicc-mc"}));
+  }
   return workflow;
 }
