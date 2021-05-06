@@ -66,8 +66,7 @@ struct HFCandidateCreatorXicc {
 
   void process(aod::Collision const& collision,
                soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelXicToPKPiCandidate>> const& xicCands,
-               aod::BigTracks const& tracks)
-  {
+               aod::BigTracks const& tracks) {
     // 3-prong vertex fitter to rebuild the Xic vertex
     o2::vertexing::DCAFitterN<3> df3;
     df3.setBz(magneticField);
@@ -127,7 +126,7 @@ struct HFCandidateCreatorXicc {
         int index2Xic = track2.globalIndex();
         int charge = track0.sign() + track1.sign() + track2.sign();
 
-        for (auto& trackpion : tracks) {
+	for (auto& trackpion : tracks) {
           if (trackpion.sign() * charge < 0) {
             continue;
           }
@@ -135,9 +134,9 @@ struct HFCandidateCreatorXicc {
             continue;
           }
           array<float, 3> pvecpion;
-          auto trackParVarPi = getTrackParCov(trackpion);
-
-          // reconstruct the 3-prong X vertex
+	  auto trackParVarPi = getTrackParCov(trackpion);
+ 
+	  // reconstruct the 3-prong X vertex
           if (df2.process(trackxic, trackParVarPi) == 0) {
             continue;
           }
@@ -146,19 +145,19 @@ struct HFCandidateCreatorXicc {
           const auto& secondaryVertexXicc = df2.getPCACandidate();
           auto chi2PCA = df2.getChi2AtPCACandidate();
           auto covMatrixPCA = df2.calcPCACovMatrix().Array();
-
+          
           df2.propagateTracksToVertex();
-          df2.getTrack(0).getPxPyPzGlo(pvecxic);
-          df2.getTrack(1).getPxPyPzGlo(pvecpion);
+          df2.getTrack(0).getPxPyPzGlo(pvecxic); 
+          df2.getTrack(1).getPxPyPzGlo(pvecpion); 
 
-          auto primaryVertex = getPrimaryVertex(collision);
+	  auto primaryVertex = getPrimaryVertex(collision);
           auto covMatrixPV = primaryVertex.getCov();
           o2::dataformats::DCA impactParameter0;
           o2::dataformats::DCA impactParameter1;
           trackxic.propagateToDCA(primaryVertex, magneticField, &impactParameter0);
           trackParVarPi.propagateToDCA(primaryVertex, magneticField, &impactParameter1);
 
-          // get uncertainty of the decay length
+	  // get uncertainty of the decay length
           double phi, theta;
           getPointDirection(array{collision.posX(), collision.posY(), collision.posZ()}, secondaryVertexXicc, phi, theta);
           auto errorDecayLength = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, theta) + getRotatedCovMatrixXX(covMatrixPCA, phi, theta));
@@ -174,14 +173,14 @@ struct HFCandidateCreatorXicc {
                            pvecxic[0], pvecxic[1], pvecxic[2],
                            pvecpion[0], pvecpion[1], pvecpion[2],
                            impactParameter0.getY(), impactParameter1.getY(),
-                           std::sqrt(impactParameter0.getSigmaY2()), std::sqrt(impactParameter1.getSigmaY2()),
+                           std::sqrt(impactParameter0.getSigmaY2()), std::sqrt(impactParameter1.getSigmaY2()), 
                            xicCand.globalIndex(), trackpion.globalIndex(),
                            hfFlag);
           // calculate invariant mass
           auto arrayMomenta = array{pvecxic, pvecpion};
           massXicc = RecoDecay::M(std::move(arrayMomenta), array{massXic, massPi});
           hmassXicc->Fill(massXicc);
-        } // if on selected Xicc
+      } // if on selected Xicc
     }   // loop over candidates
   }     // end of process
 };      //end of struct
