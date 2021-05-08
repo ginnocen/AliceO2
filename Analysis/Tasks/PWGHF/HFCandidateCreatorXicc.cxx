@@ -13,6 +13,8 @@
 /// \note Extended from HFCandidateCreator2Prong, HFCandidateCreator3Prong, HFCandidateCreatorX
 ///
 /// \author Gian Michele Innocenti <gian.michele.innocenti@cern.ch>, CERN
+/// \author Luigi Dello Stritto <luigi.dello.stritto@cern.ch >, SALERNO
+/// \author Mattia Faggin <mattia.faggin@cern.ch>, University and INFN PADOVA
 
 #include "Framework/AnalysisTask.h"
 #include "DetectorsVertexing/DCAFitterN.h"
@@ -25,8 +27,6 @@
 using namespace o2;
 using namespace o2::framework;
 using namespace o2::aod::hf_cand;
-using namespace o2::aod::hf_cand_prong2;
-using namespace o2::aod::hf_cand_prong3;
 using namespace o2::aod::hf_cand_xicc;
 using namespace o2::framework::expressions; //FIXME not sure if this is needed
 
@@ -89,7 +89,7 @@ struct HFCandidateCreatorXicc {
     df2.setUseAbsDCA(true);
 
     for (auto& xicCand : xicCands) {
-      if (!(xicCand.hfflag() & 1 << XicToPKPi)) {
+      if (!(xicCand.hfflag() & 1 << o2::aod::hf_cand_prong3::XicToPKPi)) {
         continue;
       }
       if (xicCand.isSelXicToPKPi() >= d_selectionFlagXic) {
@@ -128,6 +128,9 @@ struct HFCandidateCreatorXicc {
       int charge = track0.sign() + track1.sign() + track2.sign();
 
       for (auto& trackpion : tracks) {
+        if (trackpion.pt() < 1.0) {
+          continue;
+        }
         if (trackpion.sign() * charge < 0) {
           continue;
         }
@@ -164,7 +167,7 @@ struct HFCandidateCreatorXicc {
         auto errorDecayLength = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, theta) + getRotatedCovMatrixXX(covMatrixPCA, phi, theta));
         auto errorDecayLengthXY = std::sqrt(getRotatedCovMatrixXX(covMatrixPV, phi, 0.) + getRotatedCovMatrixXX(covMatrixPCA, phi, 0.));
 
-        int hfFlag = 1 << XiccToXicPi;
+        int hfFlag = 1 << DecayType::XiccToXicPi;
 
         rowCandidateBase(collision.globalIndex(),
                          collision.posX(), collision.posY(), collision.posZ(),
@@ -182,7 +185,7 @@ struct HFCandidateCreatorXicc {
         massXicc = RecoDecay::M(std::move(arrayMomenta), array{massXic, massPi});
         hmassXicc->Fill(massXicc);
       } // if on selected Xicc
-    }   // loop over candidates
+   }   // loop over candidates
   }     // end of process
 };      //end of struct
 
@@ -218,10 +221,26 @@ struct HFCandidateCreatorXiccMC {
 
     // Match generated particles.
     for (auto& particle : particlesMC) {
+
       //Printf("New gen. candidate");
       flag = 1;
       origin = 0;
       channel = 0;
+      // Xicc → Xic + π+
+      if (RecoDecay::isMatchedMCGen(particlesMC, particle, 4422, array{4232, +kPiPlus}, true)) {
+        // Match Xic -> pKπ
+        std::vector<int> arrDaughter;
+        RecoDecay::getDaughters(particlesMC, particle, &arrDaughter, array{4232}, 1);
+        auto XicCandMC = particlesMC.iteratorAt(arrDaughter[0]);
+        //Printf("Checking Ξc± → p± K∓ π±");
+        if (RecoDecay::isMatchedMCGen(particlesMC, particle, pdg::Code::kXiCPlus, array{+kProton, -kKPlus, +kPiPlus}, true, &sign)) {
+          flag = sign * (1 << o2::analysis::pdg::kXiCPlus);
+        }
+      }
+      // Check whether the particle is non-prompt (from a b quark).
+      if (flag != 0) {
+        origin = (RecoDecay::getMother(particlesMC, particle, 5, true) > -1 ? NonPrompt : Prompt);
+      } 
       rowMCMatchGen(flag, origin, channel);
     }
   }
