@@ -481,31 +481,6 @@ auto InvMassXicToPiKP(const T& candidate)
   return InvMassLcpiKp(candidate);
 }
 
-// Ξcc±± → p± K∓ π± π±
-
-template <typename T>
-auto CtXicc(const T& candidate)
-{
-  return candidate.ct(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
-}
-
-template <typename T>
-auto YXicc(const T& candidate)
-{
-  return candidate.y(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
-}
-
-template <typename T>
-auto EXicc(const T& candidate)
-{
-  return candidate.e(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
-}
-
-template <typename T>
-auto InvMassXiccToXicPi(const T& candidate)
-{
-  return candidate.m(array{RecoDecay::getMassPDG(pdg::Code::kXiCPlus), RecoDecay::getMassPDG(kPiPlus)});
-}
 } // namespace hf_cand_prong3
 
 // 3-prong decay candidate table
@@ -568,7 +543,7 @@ DECLARE_SOA_TABLE(HfCandProng3MCGen, "AOD", "HFCANDP3MCGEN", //!
 // specific Xicc candidate properties
 namespace hf_cand_xicc
 {
-DECLARE_SOA_INDEX_COLUMN_FULL(Index0, index0, int, HfCandProng3, "_0"); // Xicc index
+DECLARE_SOA_INDEX_COLUMN_FULL(Index0, index0, int, HfCandProng2, "_0"); // Xic index
 // MC matching result:
 DECLARE_SOA_COLUMN(FlagMCMatchRec, flagMCMatchRec, int8_t);         // reconstruction level
 DECLARE_SOA_COLUMN(FlagMCMatchGen, flagMCMatchGen, int8_t);         // generator level
@@ -578,6 +553,32 @@ DECLARE_SOA_COLUMN(FlagMCDecayChanRec, flagMCDecayChanRec, int8_t); // resonant 
 DECLARE_SOA_COLUMN(FlagMCDecayChanGen, flagMCDecayChanGen, int8_t); // resonant decay channel flag, generator level
 // mapping of decay types
 enum DecayType { XiccToXicPi = 0 }; // move this to a dedicated cascade namespace in the future?
+
+// Ξcc±± → p± K∓ π± π±
+
+template <typename T>
+auto CtXicc(const T& candidate)
+{
+  return candidate.ct(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
+}
+
+template <typename T>
+auto YXicc(const T& candidate)
+{
+  return candidate.y(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
+}
+
+template <typename T>
+auto EXicc(const T& candidate)
+{
+  return candidate.e(RecoDecay::getMassPDG(pdg::Code::kXiCCPlusPlus));
+}
+
+template <typename T>
+auto InvMassXiccToXicPi(const T& candidate)
+{
+  return candidate.m(array{RecoDecay::getMassPDG(pdg::Code::kXiCPlus), RecoDecay::getMassPDG(kPiPlus)});
+}
 } // namespace hf_cand_xicc
 
 // declare dedicated Xicc candidate table
