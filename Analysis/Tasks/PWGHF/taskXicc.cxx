@@ -67,7 +67,7 @@ struct TaskXicc {
   //Filter filterSelectCandidates = (aod::hf_selcandidate_xicc::isSelXiccToPKPiPi >= d_selectionFlagXicc || aod::hf_selcandidate_xicc::isSelXicToPiKPPi >= d_selectionFlagXicc);
 
   //void process(soa::Filtered<soa::Join<aod::HfCandXicc, aod::HFSelXiccToPKPiPiCandidate>> const& candidates)
-  void process(aod::HfCandXicc  const& candidates)
+  void process(aod::HfCandXicc const& candidates)
   {
     for (auto& candidate : candidates) {
       if (candidate.pt() < 7.) {

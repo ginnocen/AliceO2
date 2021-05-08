@@ -185,7 +185,7 @@ struct HFCandidateCreatorXicc {
         massXicc = RecoDecay::M(std::move(arrayMomenta), array{massXic, massPi});
         hmassXicc->Fill(massXicc);
       } // if on selected Xicc
-   }   // loop over candidates
+    }   // loop over candidates
   }     // end of process
 };      //end of struct
 
@@ -240,7 +240,7 @@ struct HFCandidateCreatorXiccMC {
       // Check whether the particle is non-prompt (from a b quark).
       if (flag != 0) {
         origin = (RecoDecay::getMother(particlesMC, particle, 5, true) > -1 ? NonPrompt : Prompt);
-      } 
+      }
       rowMCMatchGen(flag, origin, channel);
     }
   }
