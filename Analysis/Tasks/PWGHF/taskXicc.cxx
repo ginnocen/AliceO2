@@ -171,7 +171,7 @@ struct TaskXiccMC {
       } else {
         registry.fill(HIST("hPtRecBg"), candidate.pt());
         registry.fill(HIST("hEtaRecBg"), candidate.eta());
- 
+
         registry.fill(HIST("hmassBg"), InvMassXiccToXicPi(candidate), candidate.pt()); //FIXME need to consider the two mass hp
         registry.fill(HIST("hdeclengthBg"), candidate.decayLength(), candidate.pt());
         registry.fill(HIST("hCPABg"), candidate.cpa(), candidate.pt());
