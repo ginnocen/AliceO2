@@ -154,9 +154,9 @@ struct TaskXiccMC {
       }
       if (std::abs(candidate.flagMCMatchRec()) == 1 << DecayType::XiccToXicPi) {
         // Get the corresponding MC particle.
-        //auto indexMother = RecoDecay::getMother(particlesMC, candidate.index0_as<aod::BigTracksMC>().mcParticle_as<soa::Join<aod::McParticles, aod::HfCandXiccMCGen>>(), 4422, true);
-        //auto particleMother = particlesMC.iteratorAt(indexMother);
-        //registry.fill(HIST("hPtGenSig"), particleMother.pt()); // gen. level pT
+        auto indexMother = RecoDecay::getMother(particlesMC, candidate.index1_as<aod::BigTracksMC>().mcParticle_as<soa::Join<aod::McParticles, aod::HfCandXiccMCGen>>(), 4422, true);
+        auto particleMother = particlesMC.iteratorAt(indexMother);
+        registry.fill(HIST("hPtGenSig"), particleMother.pt()); // gen. level pT
         registry.fill(HIST("hPtRecSig"), candidate.pt());      // rec. level pT
         registry.fill(HIST("hCPARecSig"), candidate.cpa());
         registry.fill(HIST("hEtaRecSig"), candidate.eta());
