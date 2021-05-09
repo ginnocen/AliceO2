@@ -220,13 +220,13 @@ struct HFCandidateCreatorXiccMC {
 
       auto xicCand = candidate.index0();
       auto arrayDaughters = array{xicCand.index0_as<aod::BigTracksMC>(),
-	                          xicCand.index1_as<aod::BigTracksMC>(),
-	                          xicCand.index2_as<aod::BigTracksMC>(),
+                                  xicCand.index1_as<aod::BigTracksMC>(),
+                                  xicCand.index2_as<aod::BigTracksMC>(),
                                   candidate.index1_as<aod::BigTracksMC>()};
 
       // Ξcc±± → p± K∓ π± π±
       //Printf("Checking Ξcc±± → p± K∓ π± π±");
-      //FIXME Be aware that at the moment, you are not considering any resonant channel 
+      //FIXME Be aware that at the moment, you are not considering any resonant channel
       indexRec = RecoDecay::getMatchedMCRec(particlesMC, arrayDaughters, pdg::Code::kXiCCPlusPlus, array{+kProton, -kKPlus, +kPiPlus, +kPiPlus}, true, &sign, 3);
       if (indexRec > -1) {
         flag = 1 << XiccToXicPi;
@@ -237,7 +237,7 @@ struct HFCandidateCreatorXiccMC {
         auto particle = particlesMC.iteratorAt(indexRec);
         origin = (RecoDecay::getMother(particlesMC, particle, 5, true) > -1 ? NonPrompt : Prompt);
       }
-      
+
       rowMCMatchRec(flag, origin, channel);
     }
 
@@ -253,7 +253,7 @@ struct HFCandidateCreatorXiccMC {
         std::vector<int> arrDaughter;
         RecoDecay::getDaughters(particlesMC, particle, &arrDaughter, array{4232}, 1);
         auto XicCandMC = particlesMC.iteratorAt(arrDaughter[0]);
-	//Printf("Checking Ξc± → p± K∓ π±");
+        //Printf("Checking Ξc± → p± K∓ π±");
         if (RecoDecay::isMatchedMCGen(particlesMC, XicCandMC, 4232, array{+kProton, -kKPlus, +kPiPlus}, true, &sign)) {
           flag = sign * (1 << XiccToXicPi);
         }
